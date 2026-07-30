@@ -61,6 +61,44 @@
     .r-rev-l.is-in video { transform: scale(1) !important; }
     @media (prefers-reduced-motion: reduce) { .r-rev { opacity: 1 !important; transform: none !important; } }
 
+    /* ---------- Selected Work: full-page project panels + left index ---------- */
+    html { scroll-snap-type: y proximity; }
+    #work { position: relative; background: #ffffff; }
+    .w-railwrap { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+    .w-rail { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; justify-content: center; gap: 40px; padding-left: 40px; }
+    .w-rail-label { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: #9e9ea0; pointer-events: auto; }
+    .w-index { display: flex; flex-direction: column; gap: 12px; pointer-events: auto; }
+    .w-num { display: flex; align-items: center; gap: 12px; font-family: 'Bebas Neue', sans-serif; font-size: 20px; line-height: 1; color: #cacacb; letter-spacing: 0.06em; transition: color .5s ease; }
+    .w-num::before { content: ""; width: 16px; height: 1px; background: #cacacb; transition: width .5s cubic-bezier(.16,1,.3,1), background .5s ease; }
+    .w-num.is-active { color: #111111; }
+    .w-num.is-active::before { width: 40px; background: #111111; }
+    .w-panel { min-height: 100vh; display: flex; align-items: center; scroll-snap-align: start; padding: 96px 56px 96px 132px; }
+    .w-inner { width: 100%; max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 64px; align-items: center; transition: opacity 1.1s cubic-bezier(.16,1,.3,1), transform 1.1s cubic-bezier(.16,1,.3,1); }
+    .w-panel.armed .w-inner { opacity: 0; transform: translateY(48px); }
+    .w-panel.armed.is-in .w-inner { opacity: 1; transform: translateY(0); }
+    .w-eyebrow { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+    .w-eyebrow .n { font-family: 'Bebas Neue', sans-serif; font-size: 20px; color: #cacacb; }
+    .w-eyebrow .c { font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: #707072; }
+    .w-title { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: clamp(56px, 7vw, 120px); line-height: 0.9; text-transform: uppercase; letter-spacing: 0.01em; }
+    .w-desc { margin-top: 24px; max-width: 46ch; font-size: 16px; line-height: 1.6; color: #707072; }
+    .w-cta { margin-top: 32px; display: inline-flex; align-items: center; gap: 10px; height: 50px; padding: 0 28px; border-radius: 9999px; background: #111111; color: #ffffff; font-size: 13px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; transition: transform .25s ease; }
+    .w-cta:hover { transform: translateX(4px); }
+    .w-media { position: relative; aspect-ratio: 4/3; background: #f5f5f5; border-radius: 18px; overflow: hidden; }
+    .w-media video { position: absolute; inset: -7%; width: 114%; height: 114%; object-fit: cover; background: #111111; will-change: transform; }
+    .w-badge { position: absolute; bottom: 16px; left: 16px; z-index: 2; background: #ffffff; border: 1px solid #cacacb; border-radius: 9999px; padding: 5px 12px; font-size: 12px; font-weight: 500; }
+    @media (prefers-reduced-motion: reduce) { .w-inner { opacity: 1 !important; transform: none !important; } }
+    @media (max-width: 1000px) {
+      .w-inner { grid-template-columns: 1fr !important; gap: 32px !important; }
+      .w-media { order: -1; }
+      .w-panel { padding: 96px 24px 96px 76px !important; }
+      .w-title { font-size: clamp(44px, 12vw, 92px) !important; }
+    }
+    @media (max-width: 640px) {
+      .w-rail-label { display: none; }
+      .w-rail { padding-left: 18px; gap: 0; }
+      .w-panel { padding: 84px 20px 84px 54px !important; }
+    }
+
     /* ---------- Responsive ---------- */
     @media (max-width: 1100px) {
       .r-wgrid { grid-template-columns: 1fr !important; gap: 28px !important; }
@@ -119,102 +157,79 @@
     <div style="position: absolute; z-index: 2; right: 40px; bottom: 30px; font-size: 12px; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(255,255,255,0.7);">Scroll ↓</div>
   </section>
 
-  <!-- ===================== SELECTED WORK ===================== -->
-  <section id="work" class="r-sec" style="max-width: 1440px; margin: 0 auto; padding: 96px 40px 72px;">
-    <div class="r-whead" style="display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; flex-wrap: wrap; margin-bottom: 44px;">
-      <div>
-        <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: #707072; margin-bottom: 14px;">01 / Selected Work</div>
-        <h2 style="font-size: clamp(28px, 3.6vw, 44px); font-weight: 600; line-height: 1.04; letter-spacing: -0.02em; text-align: left">High-performance architecture <br>wrapped in premium aesthetics.</h2>
+  <!-- ===================== SELECTED WORK (full-page panels + left index) ===================== -->
+  <section id="work">
+    <div class="w-railwrap" aria-hidden="true">
+      <div class="w-rail">
+        <div class="w-rail-label">Selected Work</div>
+        <div class="w-index">
+          <span class="w-num is-active" data-n="1">01</span>
+          <span class="w-num" data-n="2">02</span>
+          <span class="w-num" data-n="3">03</span>
+          <span class="w-num" data-n="4">04</span>
+        </div>
       </div>
-      <a href="#contact" style="display: inline-flex; align-items: center; height: 48px; padding: 0 28px; border-radius: 9999px; background: #f5f5f5; color: #111111; font-size: 16px; font-weight: 500; white-space: nowrap;">Start yours</a>
     </div>
 
-    <div style="display: flex; flex-direction: column; gap: 40px;">
-      <!-- CARD 1 -->
-      <div style="position: sticky; top: 84px;">
-        <div style="display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 40px; align-items: stretch; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 24px; padding: 32px; box-shadow: 0 -1px 0 #ffffff;" class="r-wgrid">
-          <div style="display: flex; flex-direction: column; align-self: stretch; min-height: 320px; justify-content: space-between;">
-            <div style="display: flex; align-items: baseline; gap: 12px;">
-              <div style="font-family: 'Bebas Neue', sans-serif; font-size: 22px; line-height: 1; color: #cacacb;">01</div>
-              <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: #707072;">Event Platform / Web</div>
-            </div>
-            <div style="font-family: 'Bebas Neue', sans-serif; font-size: clamp(48px, 5.2vw, 80px); line-height: 0.88; text-transform: uppercase; margin: 20px 0 18px;">Shark Sports</div>
-            <p style="max-width: 46ch; font-size: 15px; line-height: 1.55; color: #707072; margin-bottom: auto; text-align: justify">Engineered a clear, user-focused digital ecosystem to streamline sports and event bookings. Blended interactive elements with highly structured navigation to drive daily operations and user engagement.</p>
-            <div class="r-wfoot" style="margin-top: 28px; padding-top: 18px; border-top: 1px solid #e5e5e5; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
-              <a href="https://sharksports.co.in" target="_blank" rel="noopener" class="work-url" style="font-size: 14px; font-weight: 500; letter-spacing: 0.01em; color: #707072;">sharksports.co.in ↗</a>
-              <a href="https://sharksports.co.in" target="_blank" rel="noopener" style="display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 20px; border-radius: 9999px; background: #111111; color: #ffffff; font-size: 13px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;">View project →</a>
-            </div>
-          </div>
-          <div style="position: relative; aspect-ratio: 16/9; background: #f5f5f5; overflow: hidden; border-radius: 16px;">
-            <div style="position: absolute; bottom: 16px; left: 16px; z-index: 2; background: #ffffff; border: 1px solid #cacacb; border-radius: 9999px; padding: 5px 12px; font-size: 12px; font-weight: 500;">Motion</div>
-            <video class="dc-work-vid" autoplay muted loop playsinline preload="metadata" src="work-1.mp4" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #111111;"></video>
-          </div>
+    <article class="w-panel" data-i="1">
+      <div class="w-inner">
+        <div class="w-text">
+          <div class="w-eyebrow"><span class="n">01</span><span class="c">Event Platform / Web</span></div>
+          <h3 class="w-title">Shark Sports</h3>
+          <p class="w-desc">Engineered a clear, user-focused digital ecosystem to streamline sports and event bookings. Blended interactive elements with highly structured navigation to drive daily operations and user engagement.</p>
+          <a class="w-cta" href="https://sharksports.co.in" target="_blank" rel="noopener">View project ↗</a>
+        </div>
+        <div class="w-media">
+          <div class="w-badge">Motion</div>
+          <video class="dc-work-vid" data-parallax="0.05" autoplay muted loop playsinline preload="metadata" src="work-1.mp4"></video>
         </div>
       </div>
-      <!-- CARD 2 -->
-      <div style="position: sticky; top: 104px;">
-        <div style="display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 40px; align-items: stretch; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 24px; padding: 32px; box-shadow: 0 -1px 0 #ffffff;" class="r-wgrid">
-          <div style="display: flex; flex-direction: column; align-self: stretch; min-height: 320px; justify-content: space-between;">
-            <div style="display: flex; align-items: baseline; gap: 12px;">
-              <div style="font-family: 'Bebas Neue', sans-serif; font-size: 22px; line-height: 1; color: #cacacb;">02</div>
-              <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: #707072;">Brand Experience / Web</div>
-            </div>
-            <div style="font-family: 'Bebas Neue', sans-serif; font-size: clamp(48px, 5.2vw, 80px); line-height: 0.88; text-transform: uppercase; margin: 20px 0 18px;">Go Big Hospitality</div>
-            <p style="max-width: 46ch; font-size: 15px; line-height: 1.55; color: #707072; margin-bottom: auto; text-align: justify">Translated complex F&amp;B consulting visions into a premium, structured digital experience. Built the complete web architecture to establish strong market authority and capture high-ticket inquiries.</p>
-            <div class="r-wfoot" style="margin-top: 28px; padding-top: 18px; border-top: 1px solid #e5e5e5; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
-              <a href="https://gobighospitality.com" target="_blank" rel="noopener" class="work-url" style="font-size: 14px; font-weight: 500; letter-spacing: 0.01em; color: #707072;">gobighospitality.com ↗</a>
-              <a href="https://gobighospitality.com" target="_blank" rel="noopener" style="display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 20px; border-radius: 9999px; background: #111111; color: #ffffff; font-size: 13px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;">View project →</a>
-            </div>
-          </div>
-          <div style="position: relative; aspect-ratio: 16/9; background: #f5f5f5; overflow: hidden; border-radius: 16px;">
-            <div style="position: absolute; bottom: 16px; left: 16px; z-index: 2; background: #ffffff; border: 1px solid #cacacb; border-radius: 9999px; padding: 5px 12px; font-size: 12px; font-weight: 500;">Immersive</div>
-            <video class="dc-work-vid" autoplay muted loop playsinline preload="metadata" src="work-2.mp4" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #111111;"></video>
-          </div>
+    </article>
+
+    <article class="w-panel" data-i="2">
+      <div class="w-inner">
+        <div class="w-text">
+          <div class="w-eyebrow"><span class="n">02</span><span class="c">Brand Experience / Web</span></div>
+          <h3 class="w-title">Go Big Hospitality</h3>
+          <p class="w-desc">Translated complex F&amp;B consulting visions into a premium, structured digital experience. Built the complete web architecture to establish strong market authority and capture high-ticket inquiries.</p>
+          <a class="w-cta" href="https://gobighospitality.com" target="_blank" rel="noopener">View project ↗</a>
+        </div>
+        <div class="w-media">
+          <div class="w-badge">Immersive</div>
+          <video class="dc-work-vid" data-parallax="0.05" autoplay muted loop playsinline preload="metadata" src="work-2.mp4"></video>
         </div>
       </div>
-      <!-- CARD 3 -->
-      <div style="position: sticky; top: 124px;">
-        <div style="display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 40px; align-items: stretch; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 24px; padding: 32px; box-shadow: 0 -1px 0 #ffffff;" class="r-wgrid">
-          <div style="display: flex; flex-direction: column; align-self: stretch; min-height: 320px; justify-content: space-between;">
-            <div style="display: flex; align-items: baseline; gap: 12px;">
-              <div style="font-family: 'Bebas Neue', sans-serif; font-size: 22px; line-height: 1; color: #cacacb;">03</div>
-              <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: #707072;">E-Commerce / Web</div>
-            </div>
-            <div style="font-family: 'Bebas Neue', sans-serif; font-size: clamp(48px, 5.2vw, 80px); line-height: 0.88; text-transform: uppercase; margin: 20px 0 18px;">Powder Beauty</div>
-            <p style="max-width: 46ch; font-size: 15px; line-height: 1.55; color: #707072; margin-bottom: auto; text-align: justify">Architected a high-conversion digital storefront optimized for seamless checkout and product discovery. Engineered the infrastructure to directly accelerate sales and elevate visual brand positioning.</p>
-            <div class="r-wfoot" style="margin-top: 28px; padding-top: 18px; border-top: 1px solid #e5e5e5; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
-              <a href="https://powderbeauty.com" target="_blank" rel="noopener" class="work-url" style="font-size: 14px; font-weight: 500; letter-spacing: 0.01em; color: #707072;">powderbeauty.com ↗</a>
-              <a href="https://powderbeauty.com" target="_blank" rel="noopener" style="display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 20px; border-radius: 9999px; background: #111111; color: #ffffff; font-size: 13px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;">View project →</a>
-            </div>
-          </div>
-          <div style="position: relative; aspect-ratio: 16/9; background: #f5f5f5; overflow: hidden; border-radius: 16px;">
-            <div style="position: absolute; bottom: 16px; left: 16px; z-index: 2; background: #ffffff; border: 1px solid #cacacb; border-radius: 9999px; padding: 5px 12px; font-size: 12px; font-weight: 500;">Commerce</div>
-            <video class="dc-work-vid" autoplay muted loop playsinline preload="metadata" src="work-3.mp4" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #111111;"></video>
-          </div>
+    </article>
+
+    <article class="w-panel" data-i="3">
+      <div class="w-inner">
+        <div class="w-text">
+          <div class="w-eyebrow"><span class="n">03</span><span class="c">E-Commerce / Web</span></div>
+          <h3 class="w-title">Powder Beauty</h3>
+          <p class="w-desc">Architected a high-conversion digital storefront optimized for seamless checkout and product discovery. Engineered the infrastructure to directly accelerate sales and elevate visual brand positioning.</p>
+          <a class="w-cta" href="https://powderbeauty.com" target="_blank" rel="noopener">View project ↗</a>
+        </div>
+        <div class="w-media">
+          <div class="w-badge">Commerce</div>
+          <video class="dc-work-vid" data-parallax="0.05" autoplay muted loop playsinline preload="metadata" src="work-3.mp4"></video>
         </div>
       </div>
-      <!-- CARD 4 -->
-      <div style="position: sticky; top: 144px;">
-        <div style="display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 40px; align-items: stretch; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 24px; padding: 32px; box-shadow: 0 -1px 0 #ffffff;" class="r-wgrid">
-          <div style="display: flex; flex-direction: column; align-self: stretch; min-height: 320px; justify-content: space-between;">
-            <div style="display: flex; align-items: baseline; gap: 12px;">
-              <div style="font-family: 'Bebas Neue', sans-serif; font-size: 22px; line-height: 1; color: #cacacb;">04</div>
-              <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: #707072;">Brand Experience / Web</div>
-            </div>
-            <div style="font-family: 'Bebas Neue', sans-serif; font-size: clamp(48px, 5.2vw, 80px); line-height: 0.88; text-transform: uppercase; margin: 20px 0 18px;">Ferretti &amp; Figlia</div>
-            <p style="max-width: 46ch; font-size: 15px; line-height: 1.55; color: #707072; margin-bottom: auto; text-align: justify">Crafted a minimalist, storytelling-driven digital presence for a premium artisan bakery. Integrated seamless WhatsApp ordering within a fully responsive architecture to bridge rich brand heritage with frictionless customer conversions.</p>
-            <div class="r-wfoot" style="margin-top: 28px; padding-top: 18px; border-top: 1px solid #e5e5e5; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
-              <a href="https://tejxshrivastva.github.io/Ferretti-Figlia/" target="_blank" rel="noopener" class="work-url" style="font-size: 14px; font-weight: 500; letter-spacing: 0.01em; color: #707072;">tejxshrivastva.github.io/Ferretti-Figlia ↗</a>
-              <a href="https://tejxshrivastva.github.io/Ferretti-Figlia/" target="_blank" rel="noopener" style="display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 20px; border-radius: 9999px; background: #111111; color: #ffffff; font-size: 13px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;">View project →</a>
-            </div>
-          </div>
-          <div style="position: relative; aspect-ratio: 16/9; background: #f5f5f5; overflow: hidden; border-radius: 16px;">
-            <div style="position: absolute; bottom: 16px; left: 16px; z-index: 2; background: #ffffff; border: 1px solid #cacacb; border-radius: 9999px; padding: 5px 12px; font-size: 12px; font-weight: 500;">Story</div>
-            <video class="dc-work-vid" autoplay muted loop playsinline preload="metadata" src="work-4.mp4" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #111111;"></video>
-          </div>
+    </article>
+
+    <article class="w-panel" data-i="4">
+      <div class="w-inner">
+        <div class="w-text">
+          <div class="w-eyebrow"><span class="n">04</span><span class="c">Brand Experience / Web</span></div>
+          <h3 class="w-title">Ferretti &amp; Figlia</h3>
+          <p class="w-desc">Crafted a minimalist, storytelling-driven digital presence for a premium artisan bakery. Integrated seamless WhatsApp ordering within a fully responsive architecture to bridge rich brand heritage with frictionless customer conversions.</p>
+          <a class="w-cta" href="https://tejxshrivastva.github.io/Ferretti-Figlia/" target="_blank" rel="noopener">View project ↗</a>
+        </div>
+        <div class="w-media">
+          <div class="w-badge">Story</div>
+          <video class="dc-work-vid" data-parallax="0.05" autoplay muted loop playsinline preload="metadata" src="work-4.mp4"></video>
         </div>
       </div>
-    </div>
+    </article>
   </section>
 
   <!-- ===================== CONTACT ===================== -->
@@ -222,7 +237,7 @@
     <div class="r-cgrid" style="max-width: 1440px; width: 100%; margin: 0 auto; padding: 0 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 88px;">
       <div>
         <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: #707072; margin-bottom: 18px;">02 / Contact</div>
-        <h2 style="font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: clamp(52px, 6vw, 104px); line-height: 0.9; letter-spacing: 0.005em; text-transform: uppercase;">GET IN TOUCH.</h2>
+        <h2 data-parallax="0.06" style="font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: clamp(52px, 6vw, 104px); line-height: 0.9; letter-spacing: 0.005em; text-transform: uppercase; will-change: transform;">GET IN TOUCH.</h2>
         <p style="margin-top: 22px; max-width: 42ch; font-size: 16px; line-height: 1.55; color: #39393b; text-align: justify">Please feel free to leave a brief message below to get things started, and I'll reach out to schedule a convenient time for us to connect.</p>
         <div style="margin-top: 34px; display: flex; flex-direction: column; gap: 14px;">
           <a href="tel:+919575270453" style="display: flex; align-items: center; gap: 16px; font-size: 15px; font-weight: 500;"><span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #707072; width: 84px;">Phone</span> +91 95752 70453 · +91 93997 34130</a>
@@ -281,22 +296,25 @@
       var hp = hero.play(); if (hp && hp.catch) hp.catch(function () {});
     }
 
-    // Hero parallax: background video scrolls slower than the page; the hero
-    // copy drifts down slightly and fades. Skipped when reduced motion is on.
+    // Parallax engine: hero background/copy + every [data-parallax] element
+    // across the page. Passive scroll + rAF; skipped under reduced motion.
     var prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (hero && !prefersReduced) {
+    if (!prefersReduced) {
       var heroContent = document.querySelector('.r-hero');
       var heroCue = [].slice.call(document.querySelectorAll('#top > div')).filter(function (d) {
         return /Scroll/.test(d.textContent || '');
       })[0];
-      hero.style.willChange = 'transform';
-      hero.style.transform = 'scale(1.15)';
-      hero.style.transformOrigin = 'center center';
+      var pxEls = [].slice.call(document.querySelectorAll('[data-parallax]'));
+      if (hero) {
+        hero.style.willChange = 'transform';
+        hero.style.transform = 'scale(1.15)';
+        hero.style.transformOrigin = 'center center';
+      }
       var ticking = false;
       var applyParallax = function () {
         var y = window.pageYOffset || document.documentElement.scrollTop || 0;
         var vh = window.innerHeight || 1;
-        if (y <= vh * 1.15) {
+        if (hero && y <= vh * 1.15) {
           hero.style.transform = 'translate3d(0,' + (y * 0.4).toFixed(1) + 'px,0) scale(1.15)';
           if (heroContent) {
             heroContent.style.transform = 'translate3d(0,' + (y * 0.2).toFixed(1) + 'px,0)';
@@ -304,15 +322,40 @@
           }
           if (heroCue) heroCue.style.opacity = Math.max(0, 1 - y / (vh * 0.25)).toFixed(3);
         }
+        for (var i = 0; i < pxEls.length; i++) {
+          var el = pxEls[i]; var r = el.getBoundingClientRect();
+          if (r.bottom < -vh * 0.4 || r.top > vh * 1.4) continue; // only near viewport
+          var speed = parseFloat(el.getAttribute('data-parallax')) || 0.05;
+          var off = (r.top + r.height / 2) - vh / 2;
+          el.style.transform = 'translate3d(0,' + (-off * speed).toFixed(1) + 'px,0)';
+        }
         ticking = false;
       };
       applyParallax();
-      window.addEventListener('scroll', function () {
-        if (!ticking) { ticking = true; window.requestAnimationFrame(applyParallax); }
-      }, { passive: true });
-      window.addEventListener('resize', function () {
-        if (!ticking) { ticking = true; window.requestAnimationFrame(applyParallax); }
-      }, { passive: true });
+      var onScroll = function () { if (!ticking) { ticking = true; window.requestAnimationFrame(applyParallax); } };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll, { passive: true });
+    }
+
+    // Selected Work: reveal each full-page panel on scroll + drive the left index.
+    var wPanels = [].slice.call(document.querySelectorAll('.w-panel'));
+    var wNums = [].slice.call(document.querySelectorAll('.w-num'));
+    if (wPanels.length && 'IntersectionObserver' in window && !prefersReduced) {
+      // "armed" applies the hidden pre-reveal state only once JS is running, so
+      // the section is never blank without JS. Each panel reveals as it enters.
+      wPanels.forEach(function (p) { p.classList.add('armed'); });
+      var setActive = function (i) {
+        wNums.forEach(function (n) { n.classList.toggle('is-active', n.getAttribute('data-n') === String(i)); });
+      };
+      var revealIO = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) e.target.classList.add('is-in'); });
+      }, { threshold: 0.2 });
+      var activeIO = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) setActive(e.target.getAttribute('data-i')); });
+      }, { rootMargin: '-50% 0px -49% 0px', threshold: 0 });
+      wPanels.forEach(function (p) { revealIO.observe(p); activeIO.observe(p); });
+    } else {
+      wPanels.forEach(function (p) { p.classList.add('is-in'); });
     }
 
     // Play work + reel videos only while near/in the viewport; pause off-screen.
