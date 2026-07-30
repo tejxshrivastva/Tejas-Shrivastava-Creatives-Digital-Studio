@@ -281,6 +281,40 @@
       var hp = hero.play(); if (hp && hp.catch) hp.catch(function () {});
     }
 
+    // Hero parallax: background video scrolls slower than the page; the hero
+    // copy drifts down slightly and fades. Skipped when reduced motion is on.
+    var prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (hero && !prefersReduced) {
+      var heroContent = document.querySelector('.r-hero');
+      var heroCue = [].slice.call(document.querySelectorAll('#top > div')).filter(function (d) {
+        return /Scroll/.test(d.textContent || '');
+      })[0];
+      hero.style.willChange = 'transform';
+      hero.style.transform = 'scale(1.15)';
+      hero.style.transformOrigin = 'center center';
+      var ticking = false;
+      var applyParallax = function () {
+        var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+        var vh = window.innerHeight || 1;
+        if (y <= vh * 1.15) {
+          hero.style.transform = 'translate3d(0,' + (y * 0.4).toFixed(1) + 'px,0) scale(1.15)';
+          if (heroContent) {
+            heroContent.style.transform = 'translate3d(0,' + (y * 0.2).toFixed(1) + 'px,0)';
+            heroContent.style.opacity = Math.max(0, 1 - y / (vh * 0.7)).toFixed(3);
+          }
+          if (heroCue) heroCue.style.opacity = Math.max(0, 1 - y / (vh * 0.25)).toFixed(3);
+        }
+        ticking = false;
+      };
+      applyParallax();
+      window.addEventListener('scroll', function () {
+        if (!ticking) { ticking = true; window.requestAnimationFrame(applyParallax); }
+      }, { passive: true });
+      window.addEventListener('resize', function () {
+        if (!ticking) { ticking = true; window.requestAnimationFrame(applyParallax); }
+      }, { passive: true });
+    }
+
     // Play work + reel videos only while near/in the viewport; pause off-screen.
     var vids = document.querySelectorAll('video.dc-work-vid, video.dc-reel-vid');
     vids.forEach(function (v) { v.muted = true; v.defaultMuted = true; v.volume = 0; v.loop = true; });
