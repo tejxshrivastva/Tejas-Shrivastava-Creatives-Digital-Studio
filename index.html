@@ -66,7 +66,7 @@
     /* every full-viewport section/project is a hard snap stop */
     #top, #contact { scroll-snap-align: start; scroll-snap-stop: always; }
     /* mobile keeps snap-to-next for hero + projects; contact form scrolls freely */
-    @media (max-width: 900px) { #contact { scroll-snap-align: none !important; scroll-snap-stop: normal !important; min-height: auto !important; } }
+    @media (max-width: 900px) { #contact { scroll-snap-align: start !important; scroll-snap-stop: normal !important; min-height: auto !important; } }
     #work { position: relative; background: #ffffff; }
     .w-railwrap { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
     .w-rail { position: sticky; top: 0; height: 100vh; width: fit-content; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 40px; padding-left: 40px; }
@@ -97,22 +97,25 @@
     @media (max-width: 1000px) {
       .w-inner { grid-template-columns: 1fr !important; gap: 26px !important; }
       .w-media { order: -1; }
-      .w-panel { padding: 84px 32px 60px 100px !important; } /* extra left gap clears the index */
       .w-title { font-size: clamp(44px, 11vw, 84px) !important; }
       .w-desc { font-size: 15px !important; }
+      /* full-width panels; index becomes a floating pill at the bottom */
+      .w-panel { padding: 80px 30px 108px !important; }
+      .w-rail { flex-direction: row; align-items: flex-end; justify-content: center; width: 100%; padding: 0 20px 20px; gap: 0; }
+      .w-rail-label { display: none; }
+      .w-index { flex-direction: row; align-items: center; gap: 16px; padding: 9px 18px; background: rgba(255,255,255,0.9); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 1px solid #e5e5e5; border-radius: 9999px; box-shadow: 0 6px 20px rgba(17,17,17,0.07); pointer-events: none; }
+      .w-num { font-size: 15px; gap: 0; }
+      .w-num::before { display: none; }
     }
     @media (max-width: 640px) {
       .r-hero h1 { font-size: clamp(38px, 11vw, 62px) !important; }
-      .w-rail-label { display: none; }
-      .w-rail { padding-left: 16px; }
-      .w-num { font-size: 15px; gap: 8px; }
-      .w-num::before { width: 10px; }
-      .w-num.is-active::before { width: 22px; }
-      .w-panel { padding: 74px 20px 40px 76px !important; } /* 76px left = clears rail + ~12px gap */
+      #heroVideo { object-position: 72% center; } /* keep the subject (right side) framed on mobile */
+      .w-panel { padding: 64px 20px 100px !important; }
       .w-title { font-size: clamp(36px, 12.5vw, 56px) !important; }
       .w-desc { margin-top: 18px !important; }
       .w-cta { height: 46px; margin-top: 26px; }
-      #contact { padding: 72px 0 52px !important; }
+      .w-index { gap: 13px !important; }
+      #contact { padding: 64px 0 48px !important; }
     }
 
     /* ---------- Responsive ---------- */
