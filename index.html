@@ -65,12 +65,13 @@
     html { scroll-snap-type: y mandatory; }
     /* every full-viewport section/project is a hard snap stop */
     #top, #contact { scroll-snap-align: start; scroll-snap-stop: always; }
-    @media (max-width: 900px) { html { scroll-snap-type: y proximity; } } /* gentler on mobile / tall forms */
+    /* mobile keeps snap-to-next for hero + projects; contact form scrolls freely */
+    @media (max-width: 900px) { #contact { scroll-snap-align: none !important; scroll-snap-stop: normal !important; min-height: auto !important; } }
     #work { position: relative; background: #ffffff; }
     .w-railwrap { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
-    .w-rail { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; justify-content: center; gap: 40px; padding-left: 40px; }
+    .w-rail { position: sticky; top: 0; height: 100vh; width: fit-content; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 40px; padding-left: 40px; }
     .w-rail-label { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: #9e9ea0; pointer-events: auto; }
-    .w-index { display: flex; flex-direction: column; gap: 12px; pointer-events: auto; }
+    .w-index { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; pointer-events: auto; }
     .w-num { display: flex; align-items: center; gap: 12px; font-family: 'Bebas Neue', sans-serif; font-size: 20px; line-height: 1; color: #cacacb; letter-spacing: 0.06em; transition: color .5s ease; }
     .w-num::before { content: ""; width: 16px; height: 1px; background: #cacacb; transition: width .5s cubic-bezier(.16,1,.3,1), background .5s ease; }
     .w-num.is-active { color: #111111; }
@@ -94,15 +95,24 @@
     .w-badge { position: absolute; bottom: 16px; left: 16px; z-index: 2; background: #ffffff; border: 1px solid #cacacb; border-radius: 9999px; padding: 5px 12px; font-size: 12px; font-weight: 500; }
     @media (prefers-reduced-motion: reduce) { .w-inner { opacity: 1 !important; transform: none !important; } }
     @media (max-width: 1000px) {
-      .w-inner { grid-template-columns: 1fr !important; gap: 32px !important; }
+      .w-inner { grid-template-columns: 1fr !important; gap: 26px !important; }
       .w-media { order: -1; }
-      .w-panel { padding: 96px 24px 96px 76px !important; }
-      .w-title { font-size: clamp(44px, 12vw, 92px) !important; }
+      .w-panel { padding: 84px 32px 60px 100px !important; } /* extra left gap clears the index */
+      .w-title { font-size: clamp(44px, 11vw, 84px) !important; }
+      .w-desc { font-size: 15px !important; }
     }
     @media (max-width: 640px) {
+      .r-hero h1 { font-size: clamp(38px, 11vw, 62px) !important; }
       .w-rail-label { display: none; }
-      .w-rail { padding-left: 18px; gap: 0; }
-      .w-panel { padding: 84px 20px 84px 54px !important; }
+      .w-rail { padding-left: 16px; }
+      .w-num { font-size: 15px; gap: 8px; }
+      .w-num::before { width: 10px; }
+      .w-num.is-active::before { width: 22px; }
+      .w-panel { padding: 74px 20px 40px 76px !important; } /* 76px left = clears rail + ~12px gap */
+      .w-title { font-size: clamp(36px, 12.5vw, 56px) !important; }
+      .w-desc { margin-top: 18px !important; }
+      .w-cta { height: 46px; margin-top: 26px; }
+      #contact { padding: 72px 0 52px !important; }
     }
 
     /* ---------- Responsive ---------- */
