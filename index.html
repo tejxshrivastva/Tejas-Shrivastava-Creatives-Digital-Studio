@@ -98,10 +98,13 @@
     .w-badge { position: absolute; bottom: 16px; left: 16px; z-index: 2; background: #ffffff; border: 1px solid #cacacb; border-radius: 9999px; padding: 5px 12px; font-size: 12px; font-weight: 500; }
     @media (prefers-reduced-motion: reduce) { .w-inner { opacity: 1 !important; transform: none !important; } }
     @media (max-width: 1000px) {
-      .w-inner { grid-template-columns: 1fr !important; gap: 30px !important; max-width: 900px !important; align-items: start !important; }
+      .w-inner { grid-template-columns: 1fr !important; gap: 32px !important; max-width: 720px !important; align-items: start !important; }
       .w-media { order: -1; }
+      /* centered, symmetric stacked layout */
+      .w-text { align-items: center; text-align: center; }
+      .w-eyebrow { justify-content: center; }
       .w-title { font-size: clamp(52px, 10vw, 104px) !important; }
-      .w-desc { font-size: 16px !important; max-width: none !important; }
+      .w-desc { font-size: 16px !important; max-width: 52ch !important; text-align: center !important; margin-left: auto !important; margin-right: auto !important; }
       /* full-width panels; index becomes a floating pill at the bottom */
       .w-panel { padding: 72px 40px 108px !important; justify-content: center; }
       .w-rail { flex-direction: row; align-items: flex-end; justify-content: center; width: 100%; padding: 0 20px 20px; gap: 0; }
