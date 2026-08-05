@@ -361,6 +361,12 @@
 
 <script>
   (function () {
+    // Reloading (or reopening from history) should always land on the hero,
+    // not wherever the user last scrolled — browsers restore scroll position
+    // by default, so we take manual control and force it to the top.
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    window.scrollTo(0, 0);
+
     // Hero video: force muted autoplay loop (browsers block audible autoplay).
     var hero = document.getElementById('heroVideo');
     if (hero) {
