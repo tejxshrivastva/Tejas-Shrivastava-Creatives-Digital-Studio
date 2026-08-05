@@ -132,6 +132,10 @@
       #contact { padding: 64px 0 48px !important; }
       #contact h2 { transform: none !important; } /* stop parallax inflating the eyebrow gap */
       #contact .r-cgrid > div:first-child > div:first-child { margin-bottom: 10px !important; }
+      #contact h2 { text-align: center !important; }
+      .r-contact-label { text-align: center !important; }
+      .r-contact-rows { align-items: flex-start !important; width: fit-content !important; margin-left: auto !important; margin-right: auto !important; }
+      #contactSubmit { align-self: center !important; }
     }
 
     /* ---------- Responsive ---------- */
@@ -288,10 +292,10 @@
   <section id="contact" style="background: #f5f5f5; box-shadow: inset 0 1px 0 #e5e5e5; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 96px 0 64px;">
     <div class="r-cgrid" style="max-width: 1440px; width: 100%; margin: 0 auto; padding: 0 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 88px;">
       <div>
-        <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: #707072; margin-bottom: 18px;">Contact</div>
+        <div class="r-contact-label" style="font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: #707072; margin-bottom: 18px;">Contact</div>
         <h2 data-parallax="0.06" style="font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: clamp(52px, 6vw, 104px); line-height: 0.9; letter-spacing: 0.005em; text-transform: uppercase; will-change: transform;">GET IN TOUCH.</h2>
         <p style="margin-top: 22px; max-width: 42ch; font-size: 16px; line-height: 1.55; color: #39393b; text-align: justify">You have already done the hard work of building a great brand. Now it's time for a digital platform to match that ambition without draining bandwidth. Your time is best spent leading the business, while I handle the technical heavy lifting. Drop the project details below, and let's turn your web presence into a highly profitable business asset.</p>
-        <div style="margin-top: 34px; display: flex; flex-direction: column; gap: 14px;">
+        <div class="r-contact-rows" style="margin-top: 34px; display: flex; flex-direction: column; gap: 14px;">
           <a href="tel:+919399734130" style="display: flex; align-items: center; gap: 16px; font-size: 15px; font-weight: 500;"><span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #707072; width: 84px;">Phone</span> +91 93997 34130</a>
           <a href="mailto:tejxshrivastava@gmail.com" style="display: flex; align-items: center; gap: 16px; font-size: 15px; font-weight: 500;"><span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #707072; width: 84px;">Email</span> tejxshrivastava@gmail.com</a>
           <a href="https://www.linkedin.com/in/tejas-shrivastava/" target="_blank" rel="noopener" style="display: flex; align-items: center; gap: 16px; font-size: 15px; font-weight: 500;"><span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #707072; width: 84px;">Social</span> LinkedIn ↗</a>
@@ -309,8 +313,8 @@
           <input type="text" name="name" required placeholder="Your name" class="field" style="font-family: 'Inter', sans-serif; font-size: 16px; height: 52px; padding: 0 20px; border: 2px solid transparent; border-radius: 24px; background: #ffffff; outline: none; color: #111111;">
           <input type="tel" name="phone" required placeholder="Phone number" class="field" style="font-family: 'Inter', sans-serif; font-size: 16px; height: 52px; padding: 0 20px; border: 2px solid transparent; border-radius: 24px; background: #ffffff; outline: none; color: #111111;">
           <input type="email" name="email" required placeholder="Email" class="field" style="font-family: 'Inter', sans-serif; font-size: 16px; height: 52px; padding: 0 20px; border: 2px solid transparent; border-radius: 24px; background: #ffffff; outline: none; color: #111111;">
-          <textarea name="message" rows="4" placeholder="A few initial thoughts on your business and the digital project you have in mind…" class="field" style="font-family: 'Inter', sans-serif; font-size: 16px; padding: 16px 20px; border: 2px solid transparent; border-radius: 24px; background: #ffffff; outline: none; resize: vertical; color: #111111;"></textarea>
-          <button id="contactSubmit" type="submit" style="margin-top: 4px; align-self: flex-start; height: 52px; padding: 0 34px; border-radius: 9999px; border: none; background: #111111; color: #ffffff; font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 500; cursor: pointer;">Send it over →</button>
+          <textarea name="message" rows="4" placeholder="Just a quick thought on what you're looking to build. I'll take it from there." class="field" style="font-family: 'Inter', sans-serif; font-size: 16px; padding: 16px 20px; border: 2px solid transparent; border-radius: 24px; background: #ffffff; outline: none; resize: vertical; color: #111111;"></textarea>
+          <button id="contactSubmit" type="submit" style="margin-top: 4px; align-self: flex-start; height: 52px; padding: 0 34px; border-radius: 9999px; border: none; background: #111111; color: #ffffff; font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 500; cursor: pointer;">Let's get started</button>
           <div id="contactError" style="display: none; font-size: 14px; color: #d30005;">Something went wrong sending your message. Please email tejxshrivastava@gmail.com directly.</div>
         </form>
         <div id="contactThanks" style="min-height: 360px; display: none; flex-direction: column; align-items: flex-start; justify-content: center;">
@@ -470,7 +474,7 @@
         })
         .catch(function () {
           if (errBox) errBox.style.display = 'block';
-          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Send it over →'; }
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Let's get started"; }
         });
       });
     }
