@@ -54,6 +54,9 @@
     .social:hover { color: #ffffff !important; background: #111111 !important; border-color: #111111 !important; }
     .logo-home { transition: transform .25s ease; }
     .logo-home:hover { transform: scale(1.06); }
+    /* Icon size lives here (not inline) so the pill can shrink to match the
+       work-index pill's height on laptop/tablet, and grow back on mobile. */
+    .r-foot .social, .r-foot .logo-home { width: 38px; height: 38px; }
 
     /* ---------- Scroll reveal ---------- */
     .r-rev { opacity: 0; transition: opacity 0.9s cubic-bezier(.16,1,.3,1), transform 0.9s cubic-bezier(.16,1,.3,1); will-change: opacity, transform; }
@@ -73,8 +76,8 @@
     .w-railwrap { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
     .w-rail { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: row; align-items: flex-end; justify-content: center; width: 100%; padding: 0 40px 30px; }
     .w-rail-label { display: none; }
-    .w-index { display: flex; flex-direction: row; align-items: center; gap: 22px; padding: 11px 24px; background: rgba(255,255,255,0.92); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1px solid #e5e5e5; border-radius: 9999px; box-shadow: 0 10px 30px rgba(17,17,17,0.07); pointer-events: none; }
-    .w-num { display: flex; align-items: center; font-family: 'Bebas Neue', sans-serif; font-size: 18px; line-height: 1; color: #cacacb; letter-spacing: 0.06em; transition: color .5s ease; }
+    .w-index { display: flex; flex-direction: row; align-items: center; gap: 24px; padding: 14px 28px; background: rgba(255,255,255,0.92); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1px solid #e5e5e5; border-radius: 9999px; box-shadow: 0 10px 30px rgba(17,17,17,0.07); pointer-events: none; }
+    .w-num { display: flex; align-items: center; font-family: 'Bebas Neue', sans-serif; font-size: 22px; line-height: 1; color: #cacacb; letter-spacing: 0.06em; transition: color .5s ease; }
     .w-num.is-active { color: #111111; }
     .w-panel { min-height: 100vh; display: flex; align-items: center; scroll-snap-align: center; scroll-snap-stop: always; padding: 64px 72px 128px; }
     .w-inner { width: 100%; max-width: 1760px; margin: 0 auto; display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 64px; align-items: center; transition: opacity 1.1s cubic-bezier(.16,1,.3,1), transform 1.1s cubic-bezier(.16,1,.3,1); }
@@ -113,9 +116,11 @@
       .w-panel { padding: 72px 40px 108px !important; justify-content: center; }
       .w-rail { flex-direction: row; align-items: flex-end; justify-content: center; width: 100%; padding: 0 20px 20px; gap: 0; }
       .w-rail-label { display: none; }
-      .w-index { flex-direction: row; align-items: center; gap: 16px; padding: 9px 18px; background: rgba(255,255,255,0.9); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 1px solid #e5e5e5; border-radius: 9999px; box-shadow: 0 6px 20px rgba(17,17,17,0.07); pointer-events: none; }
-      .w-num { font-size: 15px; gap: 0; }
+      .w-index { flex-direction: row; align-items: center; gap: 24px; padding: 14px 28px; background: rgba(255,255,255,0.9); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 1px solid #e5e5e5; border-radius: 9999px; box-shadow: 0 6px 20px rgba(17,17,17,0.07); pointer-events: none; }
+      .w-num { font-size: 22px; gap: 0; }
       .w-num::before { display: none; }
+      /* contact footer pill clears the section edge by the same 20px the index pill does */
+      #contact { padding-bottom: 20px !important; }
     }
     @media (max-width: 640px) {
       .r-hero-h1 { font-size: clamp(21px, 6.8vw, 27px) !important; max-width: 34ch !important; text-align: center !important; margin: 0 auto !important; }
@@ -128,7 +133,11 @@
       .w-title { font-size: clamp(36px, 12.5vw, 56px) !important; }
       .w-desc { margin-top: 18px !important; }
       .w-cta { height: 46px; margin-top: 26px; }
-      .w-index { gap: 13px !important; }
+      /* mobile keeps the original pill sizes — the resize is laptop/tablet only */
+      .w-index { gap: 13px !important; padding: 9px 18px !important; }
+      .w-num { font-size: 15px !important; }
+      .r-foot { padding: 9px 16px !important; }
+      .r-foot .social, .r-foot .logo-home { width: 44px; height: 44px; }
       #contact { padding: 64px 0 48px !important; }
       #contact h2 { transform: none !important; } /* stop parallax inflating the eyebrow gap */
       #contact .r-cgrid > div:first-child > div:first-child { margin-bottom: 10px !important; }
@@ -290,8 +299,8 @@
   </section>
 
   <!-- ===================== CONTACT ===================== -->
-  <section id="contact" style="background: #ffffff; box-shadow: inset 0 1px 0 #e5e5e5; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 96px 0 64px;">
-    <div class="r-cgrid" style="max-width: 1440px; width: 100%; margin: 0 auto; padding: 0 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center;">
+  <section id="contact" style="background: #ffffff; box-shadow: inset 0 1px 0 #e5e5e5; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 96px 0 30px;">
+    <div class="r-cgrid" style="max-width: 1440px; width: 100%; margin: auto; padding: 0 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center;">
       <div>
         <div class="r-contact-label" style="font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: #707072; margin-bottom: 18px;">Contact</div>
         <h2 data-parallax="0.06" style="font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: clamp(52px, 6vw, 104px); line-height: 0.9; letter-spacing: 0.005em; text-transform: uppercase; will-change: transform;">GET IN TOUCH.</h2>
@@ -326,20 +335,20 @@
     </div>
 
     <!-- Floating social panel inside the "Get in touch" section -->
-    <footer class="r-foot" style="width: fit-content; max-width: 100%; margin: 56px auto 0; padding: 9px 16px; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 9999px; box-shadow: 0 10px 30px rgba(17,17,17,0.07); display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;">
-      <a href="https://www.instagram.com/tejxshrivastva/" target="_blank" rel="noopener" aria-label="Instagram" class="social" style="width: 44px; height: 44px; border: 1px solid #e5e5e5; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; color: #707072; transition: all 0.25s ease;">
+    <footer class="r-foot" style="width: fit-content; max-width: 100%; margin: 56px auto 0; padding: 6px 12px; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 9999px; box-shadow: 0 10px 30px rgba(17,17,17,0.07); display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;">
+      <a href="https://www.instagram.com/tejxshrivastva/" target="_blank" rel="noopener" aria-label="Instagram" class="social" style="border: 1px solid #e5e5e5; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; color: #707072; transition: all 0.25s ease;">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1"></circle></svg>
       </a>
-      <a href="https://www.linkedin.com/in/tejas-shrivastava/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social" style="width: 44px; height: 44px; border: 1px solid #e5e5e5; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; color: #707072; transition: all 0.25s ease;">
+      <a href="https://www.linkedin.com/in/tejas-shrivastava/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social" style="border: 1px solid #e5e5e5; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; color: #707072; transition: all 0.25s ease;">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 9v10.5M4.5 5.5v.01M9 19.5V13a3 3 0 0 1 6 0v6.5M9 9v10.5"></path></svg>
       </a>
-      <a href="#top" aria-label="Back to top" class="logo-home" style="width: 44px; height: 44px; border: 1px solid #e5e5e5; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex: 0 0 auto;">
+      <a href="#top" aria-label="Back to top" class="logo-home" style="border: 1px solid #e5e5e5; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex: 0 0 auto;">
         <img src="favicon-192x192.png" alt="Tejas Shrivastava" width="44" height="44" style="width: 100%; height: 100%; object-fit: cover; border-radius: 9999px; display: block;">
       </a>
-      <a href="mailto:tejxshrivastava@gmail.com" aria-label="Email" class="social" style="width: 44px; height: 44px; border: 1px solid #e5e5e5; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; color: #707072; transition: all 0.25s ease;">
+      <a href="mailto:tejxshrivastava@gmail.com" aria-label="Email" class="social" style="border: 1px solid #e5e5e5; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; color: #707072; transition: all 0.25s ease;">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3.5 7 8.5 6 8.5-6"></path></svg>
       </a>
-      <a href="https://wa.me/919399734130" target="_blank" rel="noopener" aria-label="WhatsApp" class="social" style="width: 44px; height: 44px; border: 1px solid #e5e5e5; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; color: #707072; transition: all 0.25s ease;">
+      <a href="https://wa.me/919399734130" target="_blank" rel="noopener" aria-label="WhatsApp" class="social" style="border: 1px solid #e5e5e5; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; color: #707072; transition: all 0.25s ease;">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 20.5 5 16a8 8 0 1 1 3 3l-4.5 1.5Z"></path><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5.6 0 1-.5 1-1l-1.8-.8-.9.9c-1-.4-1.9-1.3-2.3-2.3l.9-.9L10.6 8c-.5 0-1 .4-1 1Z"></path></svg>
       </a>
     </footer>
