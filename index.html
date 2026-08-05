@@ -95,7 +95,8 @@
     .w-cta, #contactSubmit, .btn-light { transition: background .25s ease, color .25s ease, box-shadow .25s ease; }
     .w-cta:hover, #contactSubmit:hover { background: #ffffff !important; color: #111111 !important; box-shadow: inset 0 0 0 1px #111111; }
     .btn-light:hover { background: #111111 !important; color: #ffffff !important; }
-    .w-media { position: relative; aspect-ratio: 16/9; background: #111111; border-radius: 18px; overflow: hidden; }
+    .w-media { position: relative; aspect-ratio: 16/9; background: #111111; border-radius: 18px; overflow: hidden; transition: transform 0.3s ease, z-index 0s; }
+    .w-panel:hover .w-media { transform: scale(1.12); z-index: 10; }
     .w-media video { position: absolute; top: 4px; left: 4px; width: calc(100% - 8px); height: calc(100% - 8px); object-fit: cover; background: #111111; border-radius: 14px; }
     .w-badge { position: absolute; bottom: 16px; left: 16px; z-index: 2; background: #ffffff; border: 1px solid #cacacb; border-radius: 9999px; padding: 5px 12px; font-size: 12px; font-weight: 500; }
     @media (prefers-reduced-motion: reduce) { .w-inner { opacity: 1 !important; transform: none !important; } }
@@ -146,6 +147,7 @@
       .r-contact-label { text-align: center !important; }
       .r-contact-rows { align-items: flex-start !important; width: fit-content !important; margin-left: auto !important; margin-right: auto !important; }
       #contactSubmit { align-self: center !important; }
+      .w-panel:hover .w-media { transform: none !important; }
       .r-form-card { padding: 20px !important; }
     }
 
