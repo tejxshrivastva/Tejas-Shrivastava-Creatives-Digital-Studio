@@ -512,5 +512,427 @@
     }
   })();
 </script>
+
+<!-- ===================== HERO WATER =====================
+     A real damped-wave height field simulated on the GPU, whose surface normals refract the
+     hero video's own pixels. Nothing is drawn on top of the footage — the footage is bent.
+
+     Why the copy is safe BY CONSTRUCTION, not by tuning:
+       - The canvas is inserted between <video> and the gradient overlay. All of #top's children
+         are positioned with z-index:auto, so they paint in DOM order; .r-hero (H1 + both CTAs)
+         has z-index:2 and therefore paints in a later layer than every one of them.
+       - The shader only ever samples the <video> texture. .r-hero is a sibling DOM node that is
+         never rasterised into the canvas, so distorting the text is not possible.
+       - pointer-events:none, and the CTAs sit above the canvas anyway.
+     The <video> is never hidden or modified, so ANY failure at any moment just reveals the
+     untouched hero. Note: must be served over http(s) — on file:// the video taints the
+     texture upload and the effect silently declines to start. -->
+<script>
+(function () {
+  'use strict';
+
+  var mqReduce = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  var mqHover  = window.matchMedia ? window.matchMedia('(hover: hover) and (pointer: fine)') : null;
+  if (mqReduce && mqReduce.matches) return;          // respect reduced motion
+  if (!mqHover || !mqHover.matches) return;          // no cursor to trail -> don't run at all
+  // NB: the width gate is deliberately NOT here. This script runs at parse time, where
+  // innerWidth can still be 0 (background tab, pre-layout) — gating on it here would
+  // permanently disable the effect with no retry. It is checked in start(), which reruns
+  // on resize, and it measures the hero element itself rather than the window.
+
+  var host  = document.getElementById('top');
+  var video = document.getElementById('heroVideo');
+  if (!host || !video) return;
+
+  // --- tunables -------------------------------------------------------------
+  var SIM_W = 224, DPR_CAP = 1.25;
+  var SIM_DT = 1 / 120, MAX_STEPS = 6;
+  var C2 = 0.55, DAMP = 0.997, EDGE_CELLS = 18.0, EDGE_DAMP = 0.94;
+  var V_REF = 1600, A_MIN = 0.12, A_MAX = 0.55, R_MAX = 5.5, R_MIN = 2.6;
+  var SPLAT_STEP = 0.5, MAX_SEG = 24, MAX_SPLATS = 48;
+
+  // GLSL ES 3.00 is strictly typed: String(18.0) is "18", and `float / 18` is a compile error.
+  // Every JS number spliced into shader source must go through this.
+  function F(n) {
+    var s = String(n);
+    return (s.indexOf('.') < 0 && s.indexOf('e') < 0 && s.indexOf('E') < 0) ? s + '.0' : s;
+  }
+
+  var VERT =
+    '#version 300 es\n' +
+    'void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));' +
+    'gl_Position=vec4(p*2.0-1.0,0.0,1.0);}';
+
+  // Propagation. The 5-point Laplacian is strongly anisotropic — a drop degenerates into a
+  // visible diamond and reads as fake. This is the isotropic 9-point stencil
+  // [4(N+S+E+W)+(diagonals)-20C]/6, obtained in 4 bilinear taps: a tap at offset d returns
+  // (1-d)^2*C + d(1-d)*axials + d^2*diagonals, and the 4:1 axial:diagonal ratio the stencil
+  // needs falls out at exactly d = 1/3, giving L = 1.5*Q - 6*C.
+  var FS_SIM =
+    '#version 300 es\nprecision highp float;\n' +
+    'uniform sampler2D uSim;uniform vec2 uSimSize,uTexel;out vec4 o;\n' +
+    'void main(){vec2 uv=vec2(gl_FragCoord.x,uSimSize.y-gl_FragCoord.y)/uSimSize;\n' +
+    ' vec4 s=texture(uSim,uv);float h=s.r,hp=s.g;vec2 d=uTexel/3.0;\n' +
+    ' float Q=texture(uSim,uv+vec2( d.x, d.y)).r+texture(uSim,uv+vec2( d.x,-d.y)).r\n' +
+    '        +texture(uSim,uv+vec2(-d.x, d.y)).r+texture(uSim,uv+vec2(-d.x,-d.y)).r;\n' +
+    ' float lap=1.5*Q-6.0*h;\n' +
+    ' float hn=(2.0*h-hp+' + F(C2) + '*lap)*' + F(DAMP) + ';\n' +
+    ' vec2 px=uv*uSimSize;\n' +
+    ' float e=min(min(px.x,uSimSize.x-px.x),min(px.y,uSimSize.y-px.y));\n' +
+    ' hn*=mix(' + F(EDGE_DAMP) + ',1.0,clamp(e/' + F(EDGE_CELLS) + ',0.0,1.0));\n' + // absorbing rim
+    ' o=vec4(hn,h,lap,0.0);}';
+
+  var FS_SPLAT =
+    '#version 300 es\nprecision highp float;\n' +
+    'uniform vec2 uSimSize,uCenter;uniform float uRadius,uAmp;out vec4 o;\n' +
+    'void main(){vec2 px=vec2(gl_FragCoord.x,uSimSize.y-gl_FragCoord.y);\n' +
+    ' vec2 v=px-uCenter;float g=exp(-dot(v,v)/(uRadius*uRadius));\n' +
+    ' o=vec4(uAmp*g,0.0,0.0,0.0);}';
+
+  // Scharr is the most rotationally symmetric 3x3 gradient operator; its inherent smoothing is
+  // exactly what we want ahead of a ~6x upsample. Bake the gradient here at sim resolution so
+  // the render pass can interpolate the GRADIENT (bounded weights) instead of differentiating
+  // an interpolated height (unbounded derivative weights).
+  var FS_GRAD =
+    '#version 300 es\nprecision highp float;\n' +
+    'uniform sampler2D uSim;uniform vec2 uSimSize,uTexel;out vec4 o;\n' +
+    'float H(vec2 uv,float i,float j,vec2 t){return texture(uSim,uv+vec2(i,j)*t).r;}\n' +
+    'void main(){vec2 uv=vec2(gl_FragCoord.x,uSimSize.y-gl_FragCoord.y)/uSimSize;vec2 t=uTexel;\n' +
+    ' float a=H(uv,-1.,-1.,t),b=H(uv,0.,-1.,t),c=H(uv,1.,-1.,t);\n' +
+    ' float l=H(uv,-1.,0.,t),r=H(uv,1.,0.,t);\n' +
+    ' float g=H(uv,-1.,1.,t),m=H(uv,0.,1.,t),n=H(uv,1.,1.,t);\n' +
+    ' float gx=(3.0*(c-a)+10.0*(r-l)+3.0*(n-g))/32.0;\n' +
+    ' float gv=(3.0*(g-a)+10.0*(m-b)+3.0*(n-c))/32.0;\n' +
+    ' vec4 s=texture(uSim,uv);o=vec4(gx,-gv,s.b,s.r);}';   // -gv => +y up
+
+  var FS_RENDER =
+    '#version 300 es\nprecision highp float;\n' +
+    'uniform sampler2D uGrad,uVideo;uniform vec2 uGradSize,uResCss,uCover,uTargetSize;\n' +
+    'uniform float uTyCss,uScale,uAmt;out vec4 o;\n' +
+    // C2-continuous cubic B-spline in 4 bilinear taps (Sigg-Hadwiger). Divisors g0,g1 are
+    // provably in [1/6,5/6] because these are VALUE weights, so they can never vanish.
+    'vec4 bic(sampler2D tx,vec2 uv,vec2 sz){vec2 tc=uv*sz-0.5;vec2 i=floor(tc);vec2 f=tc-i;\n' +
+    ' vec2 f2=f*f,f3=f2*f;vec2 w0=(1.0-f);w0=w0*w0*w0/6.0;\n' +
+    ' vec2 w1=(3.0*f3-6.0*f2+4.0)/6.0;vec2 w2=(-3.0*f3+3.0*f2+3.0*f+1.0)/6.0;vec2 w3=f3/6.0;\n' +
+    ' vec2 g0=w0+w1,g1=w2+w3;vec2 h0=(i-0.5+w1/g0)/sz,h1=(i+1.5+w3/g1)/sz;\n' +
+    ' vec4 a=texture(tx,vec2(h0.x,h0.y)),b=texture(tx,vec2(h1.x,h0.y));\n' +
+    ' vec4 c=texture(tx,vec2(h0.x,h1.y)),d=texture(tx,vec2(h1.x,h1.y));\n' +
+    ' return mix(mix(d,c,g0.x),mix(b,a,g0.x),g0.y);}\n' +
+    // refract in SCREEN space first, then undo the parallax translate, then undo scale(1.15)
+    // about the centre, then object-fit:cover. Order matters: doing refraction first keeps
+    // ripple size constant in screen px regardless of scroll or window aspect.
+    'vec2 mapUV(vec2 uv,vec2 off){vec2 p=uv+off;p.y-=uTyCss/uResCss.y;\n' +
+    ' p=(p-0.5)/uScale+0.5;return (p-0.5)*uCover+0.5;}\n' +
+    'void main(){vec2 uv=vec2(gl_FragCoord.x,uTargetSize.y-gl_FragCoord.y)/uTargetSize;\n' +
+    ' vec4 G=bic(uGrad,uv,uGradSize);vec2 gr=G.xy*uAmt;float lap=G.z*uAmt;\n' +
+    ' vec3 nR=normalize(vec3(-gr*3.0,1.0));\n' +
+    ' vec3 nS=normalize(vec3(-gr*24.0,1.0));\n' +
+    ' vec3 T=refract(vec3(0.0,0.0,-1.0),nR,0.7502);\n' +   // 1/1.333, air->water
+    ' vec2 op=T.xy/abs(T.z)*300.0;float m=length(op);\n' +
+    ' if(m>14.0) op*=14.0/m;\n' +   // ceiling: past ~15px it reads as heat haze, not water
+    ' vec2 off=vec2(op.x/uResCss.x,-op.y/uResCss.y);\n' +
+    ' float rr=texture(uVideo,mapUV(uv,off*0.955)).r;\n' +
+    ' vec3  gg=texture(uVideo,mapUV(uv,off)).rgb;\n' +
+    ' float bb=texture(uVideo,mapUV(uv,off*1.045)).b;\n' +  // exaggerated dispersion fringe
+    ' vec3 col=vec3(rr,gg.g,bb);\n' +
+    ' float bright=clamp(1.0-6.0*lap,0.82,1.30);\n' +       // brighten under crests (caustic cue)
+    ' vec3 Hv=normalize(normalize(vec3(-0.35,0.75,0.55))+vec3(0.0,0.0,1.0));\n' +
+    ' float sp=pow(max(dot(nS,Hv),0.0),140.0)*0.85;\n' +
+    ' o=vec4(col*bright+vec3(1.0,0.94,0.86)*sp,1.0);}';
+
+  var canvas = document.createElement('canvas');
+  canvas.id = 'heroWater';
+  canvas.setAttribute('aria-hidden', 'true');
+  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;' +
+                         'pointer-events:none;opacity:0;transition:opacity 500ms linear;';
+
+  var gl = canvas.getContext('webgl2', {
+    alpha: false, depth: false, stencil: false, antialias: false,
+    premultipliedAlpha: false, preserveDrawingBuffer: false,
+    desynchronized: true, failIfMajorPerformanceCaveat: true
+  });
+  if (!gl) return;
+  if (!gl.getExtension('EXT_color_buffer_float')) return;   // RGBA8 sim quantises into noise
+
+  function sh(type, src) {
+    var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { gl.deleteShader(s); return null; }
+    return s;
+  }
+  function prog(fsSrc) {
+    var v = sh(gl.VERTEX_SHADER, VERT), f = sh(gl.FRAGMENT_SHADER, fsSrc);
+    if (!v || !f) return null;
+    var p = gl.createProgram(); gl.attachShader(p, v); gl.attachShader(p, f); gl.linkProgram(p);
+    gl.deleteShader(v); gl.deleteShader(f);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { gl.deleteProgram(p); return null; }
+    return p;
+  }
+  function U(p, names) { var o = {}, i; for (i = 0; i < names.length; i++) o[names[i]] = gl.getUniformLocation(p, names[i]); return o; }
+
+  var pSim = prog(FS_SIM), pSplat = prog(FS_SPLAT), pGrad = prog(FS_GRAD), pRender = prog(FS_RENDER);
+  if (!pSim || !pSplat || !pGrad || !pRender) return;
+  var uSim = U(pSim, ['uSim', 'uSimSize', 'uTexel']);
+  var uSpl = U(pSplat, ['uSimSize', 'uCenter', 'uRadius', 'uAmp']);
+  var uGrd = U(pGrad, ['uSim', 'uSimSize', 'uTexel']);
+  var uRen = U(pRender, ['uGrad', 'uVideo', 'uGradSize', 'uResCss', 'uCover', 'uTargetSize', 'uTyCss', 'uScale', 'uAmt']);
+
+  var vao = gl.createVertexArray();          // WebGL2 requires a bound VAO even with no attribs
+  var texA, texB, texG, fboA, fboB, fboG, texV;
+  var simW = 0, simH = 0, cssW = 0, cssH = 0, cur = 0;
+  var coverX = 1, coverY = 1, tyCss = 0, frozenTy = 0, lastTransform = '';
+  var rect = null, running = false, rafId = 0, dead = false;
+  var acc = 0, lastT = 0, queue = [], prev = null, started = false, amt = 0;
+
+  function tex(w, h) {
+    var t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA16F, w, h);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+  function fbo(t) {
+    var f = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    return f;
+  }
+  function clearTo(f, w, h) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.viewport(0, 0, w, h);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+
+  function allocate() {
+    rect = host.getBoundingClientRect();
+    cssW = Math.max(1, rect.width); cssH = Math.max(1, rect.height);
+    var dpr = Math.min(window.devicePixelRatio || 1, DPR_CAP);
+    canvas.width  = Math.max(2, Math.round(cssW * dpr));
+    canvas.height = Math.max(2, Math.round(cssH * dpr));
+    // grid must match the hero aspect or ripples come out elliptical
+    var nh = Math.min(288, Math.max(96, Math.round(SIM_W * cssH / cssW)));
+    if (nh !== simH || simW !== SIM_W) {
+      simW = SIM_W; simH = nh;
+      [texA, texB, texG].forEach(function (t) { if (t) gl.deleteTexture(t); });
+      [fboA, fboB, fboG].forEach(function (f) { if (f) gl.deleteFramebuffer(f); });
+      texA = tex(simW, simH); texB = tex(simW, simH); texG = tex(simW, simH);
+      fboA = fbo(texA); fboB = fbo(texB); fboG = fbo(texG);
+      clearTo(fboA, simW, simH); clearTo(fboB, simW, simH); clearTo(fboG, simW, simH);
+      cur = 0;
+    }
+    updateCover();
+  }
+  function updateCover() {
+    var vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh || !cssW || !cssH) return;
+    var s = (cssW / cssH) / (vw / vh);
+    if (s > 1) { coverX = 1; coverY = 1 / s; } else { coverX = s; coverY = 1; }
+  }
+
+  function draw() { gl.bindVertexArray(vao); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+
+  function simStep() {
+    var src = cur ? texB : texA, dstF = cur ? fboA : fboB;
+    gl.useProgram(pSim);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dstF); gl.viewport(0, 0, simW, simH);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, src);
+    gl.uniform1i(uSim.uSim, 0);
+    gl.uniform2f(uSim.uSimSize, simW, simH);
+    gl.uniform2f(uSim.uTexel, 1 / simW, 1 / simH);
+    draw();
+    cur = cur ? 0 : 1;
+  }
+
+  function flushSplats() {
+    if (!queue.length) return;
+    gl.useProgram(pSplat);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, cur ? fboB : fboA);
+    gl.viewport(0, 0, simW, simH);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.uniform2f(uSpl.uSimSize, simW, simH);
+    for (var i = 0; i < queue.length; i++) {
+      var s = queue[i];
+      gl.uniform2f(uSpl.uCenter, s[0], s[1]);
+      gl.uniform1f(uSpl.uRadius, s[2]);
+      gl.uniform1f(uSpl.uAmp, s[3]);
+      draw();
+    }
+    gl.disable(gl.BLEND);
+    queue.length = 0;
+  }
+
+  function gradPass() {
+    gl.useProgram(pGrad);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fboG); gl.viewport(0, 0, simW, simH);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, cur ? texB : texA);
+    gl.uniform1i(uGrd.uSim, 0);
+    gl.uniform2f(uGrd.uSimSize, simW, simH);
+    gl.uniform2f(uGrd.uTexel, 1 / simW, 1 / simH);
+    draw();
+  }
+
+  function renderPass() {
+    gl.useProgram(pRender);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texG);
+    gl.uniform1i(uRen.uGrad, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texV);
+    gl.uniform1i(uRen.uVideo, 1);
+    gl.uniform2f(uRen.uGradSize, simW, simH);
+    gl.uniform2f(uRen.uResCss, cssW, cssH);
+    gl.uniform2f(uRen.uCover, coverX, coverY);
+    gl.uniform2f(uRen.uTargetSize, canvas.width, canvas.height);
+    gl.uniform1f(uRen.uTyCss, tyCss);
+    gl.uniform1f(uRen.uScale, 1.15);
+    gl.uniform1f(uRen.uAmt, amt);
+    draw();
+  }
+
+  function uploadVideo() {
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texV);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGB, gl.UNSIGNED_BYTE, video);
+  }
+
+  // The water loop owns the video transform while it runs: both the CSS string and the uTyCss
+  // uniform come from ONE pageYOffset read in ONE callback, so they physically cannot disagree
+  // even though applyParallax is a separate rAF with undefined ordering. applyParallax may write
+  // the identical string in the same frame — harmless and idempotent, and it means teardown at
+  // any instant leaves it already holding the correct value.
+  function syncParallax() {
+    var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var vh = window.innerHeight || 1;
+    if (y <= vh * 1.15) {
+      var full = 'translate3d(0,' + (y * 0.4).toFixed(1) + 'px,0) scale(1.15)';
+      if (full !== lastTransform) { video.style.transform = full; lastTransform = full; }
+      tyCss = y * 0.4; frozenTy = tyCss;
+    } else { tyCss = frozenTy; }
+  }
+
+  function teardown() {
+    if (dead) return; dead = true; running = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    host.removeEventListener('pointermove', onMove);
+    host.removeEventListener('pointerenter', onEnter);
+    host.removeEventListener('pointerleave', onLeave);
+    window.removeEventListener('resize', onResize);
+    window.removeEventListener('scroll', onResize);
+    window.removeEventListener('resize', start);
+    window.removeEventListener('load', start);
+    video.removeEventListener('loadeddata', start);
+    video.removeEventListener('canplay', start);
+    if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+  }
+
+  function frame(now) {
+    if (dead) return;
+    rafId = requestAnimationFrame(frame);
+    try {
+      if (!lastT) lastT = now;
+      var dt = Math.min((now - lastT) / 1000, 0.1); lastT = now;
+      acc += dt;
+      syncParallax();
+      var steps = Math.min(MAX_STEPS, Math.floor(acc / SIM_DT));
+      acc -= steps * SIM_DT;
+      for (var i = 0; i < steps; i++) simStep();
+      flushSplats();
+      gradPass();
+      if (video.readyState >= 2) uploadVideo();
+      amt = Math.min(1, amt + dt * 2);            // ease the effect in, avoids a pop on insert
+      renderPass();
+    } catch (err) { teardown(); }
+  }
+
+  function onResize() { if (!dead) { allocate(); rect = host.getBoundingClientRect(); } }
+  function onEnter(e) { prev = { x: e.clientX, y: e.clientY, t: performance.now() }; }
+  function onLeave() { prev = null; }
+
+  function addSegment(x0, y0, x1, y1, dtSec) {
+    if (!rect) rect = host.getBoundingClientRect();
+    var sx0 = (x0 - rect.left) / cssW * simW, sy0 = (y0 - rect.top) / cssH * simH;
+    var sx1 = (x1 - rect.left) / cssW * simW, sy1 = (y1 - rect.top) / cssH * simH;
+    var dcx = sx1 - sx0, dcy = sy1 - sy0;
+    var distCells = Math.sqrt(dcx * dcx + dcy * dcy);
+    var distCss = Math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+    if (distCells > 0.6 * simW) { queue.push([sx1, sy1, 4, A_MIN]); return; }  // teleport
+    var speed = distCss / Math.max(dtSec, 1 / 240);
+    var sN = Math.max(0, Math.min(1, speed / V_REF));
+    var amp = A_MIN + (A_MAX - A_MIN) * sN;          // fast = stronger...
+    var rad = R_MAX - (R_MAX - R_MIN) * sN;          // ...and tighter. This is the wake.
+    var n = Math.max(1, Math.min(MAX_SEG, Math.ceil(distCells / SPLAT_STEP)));
+    var spacing = Math.max(distCells / n, SPLAT_STEP);
+    // Gaussians at spacing D sum to a ridge of height a*r*sqrt(pi)/D; solving for the ridge to
+    // equal amp makes wake strength independent of pointer speed and event rate.
+    var a = Math.min(amp * spacing / (rad * 1.7724539), amp);
+    for (var k = 1; k <= n; k++) {
+      var t = k / n;
+      if (queue.length >= MAX_SPLATS) break;
+      queue.push([sx0 + dcx * t, sy0 + dcy * t, rad, a]);
+    }
+  }
+
+  function onMove(e) {
+    if (dead || !running) return;
+    var now = performance.now();
+    if (!prev) { prev = { x: e.clientX, y: e.clientY, t: now }; return; }
+    // Coalesced samples keep a fast flick continuous even at a 60Hz event rate.
+    var pts = (e.getCoalescedEvents ? e.getCoalescedEvents() : null) || [e];
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      addSegment(prev.x, prev.y, p.clientX, p.clientY, (now - prev.t) / 1000 / pts.length);
+      prev = { x: p.clientX, y: p.clientY, t: now };
+    }
+  }
+
+  function start() {
+    if (started || dead) return;
+    // Measure the hero itself, not the window: this is what the effect actually covers, and it
+    // is 0 before layout. Returning here is not fatal — resize retries.
+    var hostW = host.getBoundingClientRect().width || window.innerWidth || 0;
+    if (hostW < 900) return;
+    if (!(video.readyState >= 2 && video.videoWidth > 0)) return;   // 0x0 upload = broken texture
+    started = true;
+    allocate();
+    texV = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texV);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    try {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video);
+    } catch (err) { started = false; return; }   // file:// tainting lands here; hero untouched
+
+    // Prove it renders before it is ever visible: one full frame into the still-detached canvas.
+    // A shader that links but renders black therefore never shows even one bad hero frame.
+    syncParallax(); gradPass(); renderPass();
+    if (gl.getError() !== gl.NO_ERROR) { started = false; return; }
+
+    video.parentNode.insertBefore(canvas, video.nextSibling);
+    requestAnimationFrame(function () { canvas.style.opacity = '1'; });
+
+    running = true;
+    host.addEventListener('pointermove', onMove, { passive: true });
+    host.addEventListener('pointerenter', onEnter, { passive: true });
+    host.addEventListener('pointerleave', onLeave, { passive: true });
+    window.addEventListener('resize', onResize, { passive: true });
+    window.addEventListener('scroll', onResize, { passive: true });
+    canvas.addEventListener('webglcontextlost', teardown, false);
+    if (mqReduce && mqReduce.addEventListener) mqReduce.addEventListener('change', function (ev) { if (ev.matches) teardown(); });
+    rafId = requestAnimationFrame(frame);
+  }
+
+  // start() is idempotent and cheap once running, so retry it from every plausible trigger:
+  // the window may still be 0-wide (background tab / pre-layout) or the video not yet decodable.
+  video.addEventListener('loadeddata', start);
+  video.addEventListener('canplay', start);
+  window.addEventListener('resize', start, { passive: true });
+  window.addEventListener('load', start);
+  start();
+})();
+</script>
 </body>
 </html>
