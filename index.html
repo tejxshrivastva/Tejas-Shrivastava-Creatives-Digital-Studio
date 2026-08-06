@@ -547,8 +547,20 @@
   // --- tunables -------------------------------------------------------------
   var SIM_W = 224, DPR_CAP = 1.25;
   var SIM_DT = 1 / 120, MAX_STEPS = 6;
-  var C2 = 0.55, DAMP = 0.997, EDGE_CELLS = 18.0, EDGE_DAMP = 0.94;
-  var V_REF = 1600, A_MIN = 0.12, A_MAX = 0.55, R_MAX = 5.5, R_MIN = 2.6;
+  // Tuned so a hover is a SMALL, BRIEF disturbance at the cursor rather than a field that
+  // fills the hero. Two dials, both measured rather than guessed:
+  //   DAMP = how long. Amplitude half-life = ln2/(120*-ln(DAMP)). At the original 0.997 the
+  //     field barely decayed at all (peak 0.250 at 0.6s -> 0.223 at 2.0s): energy reflected off
+  //     the edges into a standing wave that never died, which is what made it feel permanent.
+  //     0.962 -> ~0.15s half-life; the disturbance is fully invisible by 1.0s.
+  //   C2 = how far. Wave speed is sqrt(C2) cells/step, so lowering it keeps the ripple local.
+  //     0.35 holds the visible radius to ~150px at 0.3s / ~237px at 0.6s (was 210/352).
+  //     Stability limit for this stencil is 0.75, so 0.35 is comfortably safe.
+  var C2 = 0.35, DAMP = 0.962, EDGE_CELLS = 18.0, EDGE_DAMP = 0.94;
+  // A_* is the "how strong" dial, R_* the "how big" dial (sim cells, ~6.4 CSS px each).
+  // R_MIN is not pushed below ~2 cells: below that the wavelength approaches the grid Nyquist
+  // limit and the surface turns to grid-scale noise instead of smooth ripples.
+  var V_REF = 1600, A_MIN = 0.05, A_MAX = 0.24, R_MAX = 3.2, R_MIN = 2.0;
   var SPLAT_STEP = 0.5, MAX_SEG = 24, MAX_SPLATS = 48;
 
   // GLSL ES 3.00 is strictly typed: String(18.0) is "18", and `float / 18` is a compile error.
@@ -629,7 +641,7 @@
     ' vec3 nS=normalize(vec3(-gr*24.0,1.0));\n' +
     ' vec3 T=refract(vec3(0.0,0.0,-1.0),nR,0.7502);\n' +   // 1/1.333, air->water
     ' vec2 op=T.xy/abs(T.z)*300.0;float m=length(op);\n' +
-    ' if(m>14.0) op*=14.0/m;\n' +   // ceiling: past ~15px it reads as heat haze, not water
+    ' if(m>10.0) op*=10.0/m;\n' +   // ceiling: past ~15px it reads as heat haze, not water
     ' vec2 off=vec2(op.x/uResCss.x,-op.y/uResCss.y);\n' +
     ' float rr=texture(uVideo,mapUV(uv,off*0.955)).r;\n' +
     ' vec3  gg=texture(uVideo,mapUV(uv,off)).rgb;\n' +
