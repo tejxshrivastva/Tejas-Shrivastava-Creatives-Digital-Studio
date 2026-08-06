@@ -544,7 +544,9 @@
   if (!host || !video) return;
 
   // --- tunables -------------------------------------------------------------
-  var SIM_W = 224, DPR_CAP = 1.25;
+  // Cell budget, not a fixed width: the grid's aspect must track the hero's or cells stop
+  // being square and ripples render as ellipses. 31360 = the 224x140 that a 16:10 hero used.
+  var SIM_BUDGET = 31360, SIM_MIN = 48, SIM_MAX = 384, DPR_CAP = 1.25;
   var SIM_DT = 1 / 120, MAX_STEPS = 6;
   // Tuned so a hover is a SMALL, BRIEF disturbance at the cursor rather than a field that
   // fills the hero. Two dials, both measured rather than guessed:
@@ -556,10 +558,13 @@
   //     0.35 holds the visible radius to ~150px at 0.3s / ~237px at 0.6s (was 210/352).
   //     Stability limit for this stencil is 0.75, so 0.35 is comfortably safe.
   var C2 = 0.35, DAMP = 0.962, EDGE_CELLS = 18.0, EDGE_DAMP = 0.94;
-  // A_* is the "how strong" dial, R_* the "how big" dial (sim cells, ~6.4 CSS px each).
-  // R_MIN is not pushed below ~2 cells: below that the wavelength approaches the grid Nyquist
-  // limit and the surface turns to grid-scale noise instead of smooth ripples.
-  var V_REF = 1600, A_MIN = 0.05, A_MAX = 0.24, R_MAX = 3.2, R_MIN = 2.0;
+  // A_* is the "how strong" dial, R_*_PX the "how big" dial. Radius is in CSS PIXELS, not
+  // cells: cell size now varies with viewport shape, so a cell-denominated radius would make
+  // the ripple physically smaller on mobile. Converted to cells at splat time.
+  // R_NYQUIST is a floor in cells — below ~1.8 the wavelength approaches the grid limit and
+  // the surface degrades into grid-scale noise instead of smooth ripples.
+  var V_REF = 1600, A_MIN = 0.05, A_MAX = 0.24, R_MAX_PX = 18.0, R_MIN_PX = 11.0;
+  var R_NYQUIST = 1.8;
   var SPLAT_STEP = 0.5, MAX_SEG = 24, MAX_SPLATS = 48;
 
   // GLSL ES 3.00 is strictly typed: String(18.0) is "18", and `float / 18` is a compile error.
@@ -721,10 +726,23 @@
     var dpr = Math.min(window.devicePixelRatio || 1, DPR_CAP);
     canvas.width  = Math.max(2, Math.round(cssW * dpr));
     canvas.height = Math.max(2, Math.round(cssH * dpr));
-    // grid must match the hero aspect or ripples come out elliptical
-    var nh = Math.min(288, Math.max(96, Math.round(SIM_W * cssH / cssW)));
-    if (nh !== simH || simW !== SIM_W) {
-      simW = SIM_W; simH = nh;
+    // The grid's aspect MUST equal the hero's, or cells stop being square and every ripple
+    // renders as an ellipse. The old code fixed the width at 224 and clamped the height to
+    // 288, which silently broke that on tall viewports: a 375x812 phone wants 485 rows, got
+    // 288, and cells came out 1.67 x 2.82 px — ripples stretched 1.68x vertically.
+    // Derive BOTH dimensions from the aspect against a cell budget instead.
+    var asp = cssW / cssH;
+    var nw = Math.round(Math.sqrt(SIM_BUDGET * asp));
+    var nh = Math.round(nw / asp);
+    // Bound the texture size, re-deriving the partner dimension so the aspect — and therefore
+    // squareness — survives. Squareness wins over hitting the budget exactly.
+    if (nw > SIM_MAX) { nw = SIM_MAX; nh = Math.round(nw / asp); }
+    if (nh > SIM_MAX) { nh = SIM_MAX; nw = Math.round(nh * asp); }
+    if (nw < SIM_MIN) { nw = SIM_MIN; nh = Math.round(nw / asp); }
+    if (nh < SIM_MIN) { nh = SIM_MIN; nw = Math.round(nh * asp); }
+    nw = Math.max(8, Math.min(SIM_MAX, nw)); nh = Math.max(8, Math.min(SIM_MAX, nh));
+    if (nw !== simW || nh !== simH) {
+      simW = nw; simH = nh;
       [texA, texB, texG].forEach(function (t) { if (t) gl.deleteTexture(t); });
       [fboA, fboB, fboG].forEach(function (f) { if (f) gl.deleteFramebuffer(f); });
       texA = tex(simW, simH); texB = tex(simW, simH); texG = tex(simW, simH);
@@ -884,11 +902,19 @@
     var dcx = sx1 - sx0, dcy = sy1 - sy0;
     var distCells = Math.sqrt(dcx * dcx + dcy * dcy);
     var distCss = Math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
-    if (distCells > 0.6 * simW) { queue.push([sx1, sy1, 4, A_MIN]); return; }  // teleport
+    // Cells are square, so either axis gives the same px-per-cell.
+    var cellPx = cssW / simW;
+    // Teleport (alt-tab return, window switch) measured in CSS px, not cells: a cell-based
+    // threshold scales with the grid and would misfire on a fast mobile flick.
+    if (distCss > 0.75 * Math.max(cssW, cssH)) {
+      queue.push([sx1, sy1, Math.max(R_NYQUIST, R_MIN_PX / cellPx), A_MIN]);
+      return;
+    }
     var speed = distCss / Math.max(dtSec, 1 / 240);
     var sN = Math.max(0, Math.min(1, speed / V_REF));
-    var amp = A_MIN + (A_MAX - A_MIN) * sN;          // fast = stronger...
-    var rad = R_MAX - (R_MAX - R_MIN) * sN;          // ...and tighter. This is the wake.
+    var amp = A_MIN + (A_MAX - A_MIN) * sN;                        // fast = stronger...
+    var radPx = R_MAX_PX - (R_MAX_PX - R_MIN_PX) * sN;             // ...and tighter (the wake).
+    var rad = Math.max(R_NYQUIST, radPx / cellPx);                 // px -> cells, above Nyquist
     var n = Math.max(1, Math.min(MAX_SEG, Math.ceil(distCells / SPLAT_STEP)));
     var spacing = Math.max(distCells / n, SPLAT_STEP);
     // Gaussians at spacing D sum to a ridge of height a*r*sqrt(pi)/D; solving for the ridge to
