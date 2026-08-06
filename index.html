@@ -916,10 +916,6 @@
 
   function start() {
     if (started || dead) return;
-    // Measure the hero itself, not the window: this is what the effect actually covers, and it
-    // is 0 before layout. Returning here is not fatal — resize retries.
-    var hostW = host.getBoundingClientRect().width || window.innerWidth || 0;
-    if (hostW < 900) return;
     if (!(video.readyState >= 2 && video.videoWidth > 0)) return;   // 0x0 upload = broken texture
     started = true;
     allocate();
