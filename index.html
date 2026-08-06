@@ -534,11 +534,10 @@
   var mqReduce = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   var mqHover  = window.matchMedia ? window.matchMedia('(hover: hover) and (pointer: fine)') : null;
   if (mqReduce && mqReduce.matches) return;          // respect reduced motion
-  if (!mqHover || !mqHover.matches) return;          // no cursor to trail -> don't run at all
-  // NB: the width gate is deliberately NOT here. This script runs at parse time, where
-  // innerWidth can still be 0 (background tab, pre-layout) — gating on it here would
-  // permanently disable the effect with no retry. It is checked in start(), which reruns
-  // on resize, and it measures the hero element itself rather than the window.
+  // The effect works on both hover (desktop) and touch (mobile). On touch, ripples follow
+  // the finger instead of the cursor. No width gate here — innerWidth can be 0 at parse time
+  // (background tab, pre-layout). It's checked in start(), which reruns on resize, and measures
+  // the hero element itself rather than the window.
 
   var host  = document.getElementById('top');
   var video = document.getElementById('heroVideo');
@@ -828,6 +827,9 @@
     host.removeEventListener('pointermove', onMove);
     host.removeEventListener('pointerenter', onEnter);
     host.removeEventListener('pointerleave', onLeave);
+    host.removeEventListener('touchstart', onTouchStart);
+    host.removeEventListener('touchmove', onTouchMove);
+    host.removeEventListener('touchend', onTouchEnd);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('scroll', onResize);
     window.removeEventListener('resize', start);
@@ -859,6 +861,21 @@
   function onResize() { if (!dead) { allocate(); rect = host.getBoundingClientRect(); } }
   function onEnter(e) { prev = { x: e.clientX, y: e.clientY, t: performance.now() }; }
   function onLeave() { prev = null; }
+  function onTouchStart(e) {
+    if (dead || !running || !e.touches.length) return;
+    var t = e.touches[0];
+    prev = { x: t.clientX, y: t.clientY, t: performance.now() };
+  }
+  function onTouchMove(e) {
+    if (dead || !running || !e.touches.length) return;
+    var now = performance.now();
+    for (var i = 0; i < e.touches.length; i++) {
+      var t = e.touches[i];
+      if (prev) addSegment(prev.x, prev.y, t.clientX, t.clientY, (now - prev.t) / 1000 / e.touches.length);
+      prev = { x: t.clientX, y: t.clientY, t: now };
+    }
+  }
+  function onTouchEnd(e) { prev = null; }
 
   function addSegment(x0, y0, x1, y1, dtSec) {
     if (!rect) rect = host.getBoundingClientRect();
@@ -927,9 +944,14 @@
     requestAnimationFrame(function () { canvas.style.opacity = '1'; });
 
     running = true;
+    // Desktop: pointer/mouse events (including hover)
     host.addEventListener('pointermove', onMove, { passive: true });
     host.addEventListener('pointerenter', onEnter, { passive: true });
     host.addEventListener('pointerleave', onLeave, { passive: true });
+    // Mobile: touch events (ripples follow the finger)
+    host.addEventListener('touchstart', onTouchStart, { passive: true });
+    host.addEventListener('touchmove', onTouchMove, { passive: true });
+    host.addEventListener('touchend', onTouchEnd, { passive: true });
     window.addEventListener('resize', onResize, { passive: true });
     window.addEventListener('scroll', onResize, { passive: true });
     canvas.addEventListener('webglcontextlost', teardown, false);
