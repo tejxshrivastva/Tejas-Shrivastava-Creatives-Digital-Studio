@@ -565,6 +565,8 @@
   // the surface degrades into grid-scale noise instead of smooth ripples.
   var V_REF = 1600, A_MIN = 0.05, A_MAX = 0.24, R_MAX_PX = 18.0, R_MIN_PX = 11.0;
   var R_NYQUIST = 1.8;
+  // A discrete tap/click drop (see dropAt). Its peak is A_TAP directly.
+  var A_TAP = 0.26, R_TAP_PX = 15.0;
   var SPLAT_STEP = 0.5, MAX_SEG = 24, MAX_SPLATS = 48;
 
   // GLSL ES 3.00 is strictly typed: String(18.0) is "18", and `float / 18` is a compile error.
@@ -587,7 +589,11 @@
   var FS_SIM =
     '#version 300 es\nprecision highp float;\n' +
     'uniform sampler2D uSim;uniform vec2 uSimSize,uTexel;out vec4 o;\n' +
-    'void main(){vec2 uv=vec2(gl_FragCoord.x,uSimSize.y-gl_FragCoord.y)/uSimSize;\n' +
+    // NO y-flip here. This is a texture->texture pass: the fragment writes physical row
+    // gl_FragCoord.y and must read that same row back. Flipping made every step re-mirror
+    // the field, so the ripple alternated between its true and mirrored position each step.
+    // The screen<->texture flip belongs in the render pass alone.
+    'void main(){vec2 uv=gl_FragCoord.xy/uSimSize;\n' +
     ' vec4 s=texture(uSim,uv);float h=s.r,hp=s.g;vec2 d=uTexel/3.0;\n' +
     ' float Q=texture(uSim,uv+vec2( d.x, d.y)).r+texture(uSim,uv+vec2( d.x,-d.y)).r\n' +
     '        +texture(uSim,uv+vec2(-d.x, d.y)).r+texture(uSim,uv+vec2(-d.x,-d.y)).r;\n' +
@@ -601,7 +607,9 @@
   var FS_SPLAT =
     '#version 300 es\nprecision highp float;\n' +
     'uniform vec2 uSimSize,uCenter;uniform float uRadius,uAmp;out vec4 o;\n' +
-    'void main(){vec2 px=vec2(gl_FragCoord.x,uSimSize.y-gl_FragCoord.y);\n' +
+    // uCenter arrives in top-down cell coords, and physical row 0 IS the hero top, so the
+    // fragment position is used directly — flipping put every splat at 812-y instead of y.
+    'void main(){vec2 px=gl_FragCoord.xy;\n' +
     ' vec2 v=px-uCenter;float g=exp(-dot(v,v)/(uRadius*uRadius));\n' +
     ' o=vec4(uAmp*g,0.0,0.0,0.0);}';
 
@@ -613,7 +621,9 @@
     '#version 300 es\nprecision highp float;\n' +
     'uniform sampler2D uSim;uniform vec2 uSimSize,uTexel;out vec4 o;\n' +
     'float H(vec2 uv,float i,float j,vec2 t){return texture(uSim,uv+vec2(i,j)*t).r;}\n' +
-    'void main(){vec2 uv=vec2(gl_FragCoord.x,uSimSize.y-gl_FragCoord.y)/uSimSize;vec2 t=uTexel;\n' +
+    // Also texture->texture: no flip (see FS_SIM). +v still points DOWN the hero, so the
+    // gy = -gv negation below is unchanged and still yields a +y-up gradient.
+    'void main(){vec2 uv=gl_FragCoord.xy/uSimSize;vec2 t=uTexel;\n' +
     ' float a=H(uv,-1.,-1.,t),b=H(uv,0.,-1.,t),c=H(uv,1.,-1.,t);\n' +
     ' float l=H(uv,-1.,0.,t),r=H(uv,1.,0.,t);\n' +
     ' float g=H(uv,-1.,1.,t),m=H(uv,0.,1.,t),n=H(uv,1.,1.,t);\n' +
@@ -843,6 +853,7 @@
     if (dead) return; dead = true; running = false;
     if (rafId) cancelAnimationFrame(rafId);
     host.removeEventListener('pointermove', onMove);
+    host.removeEventListener('pointerdown', onDown);
     host.removeEventListener('pointerenter', onEnter);
     host.removeEventListener('pointerleave', onLeave);
     host.removeEventListener('touchstart', onTouchStart);
@@ -879,10 +890,34 @@
   function onResize() { if (!dead) { allocate(); rect = host.getBoundingClientRect(); } }
   function onEnter(e) { prev = { x: e.clientX, y: e.clientY, t: performance.now() }; }
   function onLeave() { prev = null; }
+
+  // A single stationary tap/click must still make a drop. Movement is handled by addSegment,
+  // which needs two distinct points, so without this a press with no drag does nothing at all.
+  // Unlike a swept wake (whose per-splat amplitude is scaled down so the summed ridge equals
+  // A_MAX), an isolated splat's peak IS its amplitude — hence A_TAP is set directly.
+  function dropAt(clientX, clientY) {
+    if (dead || !running) return;
+    if (queue.length >= MAX_SPLATS) return;
+    if (!rect) rect = host.getBoundingClientRect();
+    var sx = (clientX - rect.left) / cssW * simW;
+    var sy = (clientY - rect.top) / cssH * simH;
+    if (sx < 0 || sy < 0 || sx > simW || sy > simH) return;   // press landed outside the hero
+    queue.push([sx, sy, Math.max(R_NYQUIST, R_TAP_PX / (cssW / simW)), A_TAP]);
+  }
+
+  function onDown(e) {
+    if (e.pointerType && e.pointerType !== 'mouse') return;   // touch goes through touchstart
+    prev = { x: e.clientX, y: e.clientY, t: performance.now() };
+    dropAt(e.clientX, e.clientY);
+  }
   function onTouchStart(e) {
-    if (dead || !running || !e.touches.length) return;
-    var t = e.touches[0];
-    prev = { x: t.clientX, y: t.clientY, t: performance.now() };
+    if (dead || !running || !e.changedTouches.length) return;
+    // changedTouches = the fingers that just landed, so each new finger gets its own drop.
+    for (var i = 0; i < e.changedTouches.length; i++) {
+      dropAt(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+    }
+    var f = e.changedTouches[0];
+    prev = { x: f.clientX, y: f.clientY, t: performance.now() };
   }
   function onTouchMove(e) {
     if (dead || !running || !e.touches.length) return;
@@ -929,10 +964,17 @@
 
   function onMove(e) {
     if (dead || !running) return;
+    // Touch is driven by the touchmove handler. Without this, a touch device fires BOTH
+    // pointermove and touchmove for one finger and every splat gets injected twice.
+    if (e.pointerType && e.pointerType !== 'mouse') return;
     var now = performance.now();
     if (!prev) { prev = { x: e.clientX, y: e.clientY, t: now }; return; }
     // Coalesced samples keep a fast flick continuous even at a 60Hz event rate.
-    var pts = (e.getCoalescedEvents ? e.getCoalescedEvents() : null) || [e];
+    // Must test .length, not truthiness: getCoalescedEvents() returns an EMPTY array for
+    // untrusted events, and [] is truthy, so `|| [e]` would never kick in and the wake
+    // would silently vanish.
+    var co = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
+    var pts = (co && co.length) ? co : [e];
     for (var i = 0; i < pts.length; i++) {
       var p = pts[i];
       addSegment(prev.x, prev.y, p.clientX, p.clientY, (now - prev.t) / 1000 / pts.length);
@@ -968,6 +1010,7 @@
     running = true;
     // Desktop: pointer/mouse events (including hover)
     host.addEventListener('pointermove', onMove, { passive: true });
+    host.addEventListener('pointerdown', onDown, { passive: true });   // click with no drag
     host.addEventListener('pointerenter', onEnter, { passive: true });
     host.addEventListener('pointerleave', onLeave, { passive: true });
     // Mobile: touch events (ripples follow the finger)
