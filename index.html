@@ -547,6 +547,8 @@
   // Cell budget, not a fixed width: the grid's aspect must track the hero's or cells stop
   // being square and ripples render as ellipses. 31360 = the 224x140 that a 16:10 hero used.
   var SIM_BUDGET = 31360, SIM_MIN = 48, SIM_MAX = 384, DPR_CAP = 1.25;
+  // Smallest hero box we will treat as a genuine layout measurement (see allocate).
+  var MIN_HERO = 200;
   var SIM_DT = 1 / 120, MAX_STEPS = 6;
   // Tuned so a hover is a SMALL, BRIEF disturbance at the cursor rather than a field that
   // fills the hero. Two dials, both measured rather than guessed:
@@ -657,6 +659,9 @@
     ' vec2 op=T.xy/abs(T.z)*300.0;float m=length(op);\n' +
     ' if(m>10.0) op*=10.0/m;\n' +   // ceiling: past ~15px it reads as heat haze, not water
     ' vec2 off=vec2(op.x/uResCss.x,-op.y/uResCss.y);\n' +
+    // Hard bound in UV. With a sane uResCss this never binds (10px over a >=200px hero is
+    // 0.05), but it guarantees that a bad frame of reference can never smear the whole hero.
+    ' off=clamp(off,vec2(-0.05),vec2(0.05));\n' +
     ' float rr=texture(uVideo,mapUV(uv,off*0.955)).r;\n' +
     ' vec3  gg=texture(uVideo,mapUV(uv,off)).rgb;\n' +
     ' float bb=texture(uVideo,mapUV(uv,off*1.045)).b;\n' +  // exaggerated dispersion fringe
@@ -706,7 +711,7 @@
   var texA, texB, texG, fboA, fboB, fboG, texV;
   var simW = 0, simH = 0, cssW = 0, cssH = 0, cur = 0;
   var coverX = 1, coverY = 1, tyCss = 0, frozenTy = 0, lastTransform = '';
-  var rect = null, running = false, rafId = 0, dead = false;
+  var rect = null, running = false, rafId = 0, dead = false, ro = null, frameNo = 0;
   var acc = 0, lastT = 0, queue = [], prev = null, started = false, amt = 0;
 
   function tex(w, h) {
@@ -730,9 +735,17 @@
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
   }
 
+  // Refuse to configure from an implausible measurement. #top is 100vh with min-height:640px,
+  // so anything tiny means the hero is not laid out yet (or is hidden) — NOT a real size.
+  // Clamping such a value to 1 instead (what this used to do) poisons everything downstream:
+  // uResCss.y = 1 turns a 10px refraction offset into 10.0 in UV space, and radPx/(cssW/simW)
+  // turns one tap into a splat that floods the entire grid. The visible result is the whole
+  // hero warping on any interaction. Returning false is safe — callers retry.
   function allocate() {
-    rect = host.getBoundingClientRect();
-    cssW = Math.max(1, rect.width); cssH = Math.max(1, rect.height);
+    var r = host.getBoundingClientRect();
+    if (!(r.width >= MIN_HERO && r.height >= MIN_HERO)) return false;
+    rect = r;
+    cssW = r.width; cssH = r.height;
     var dpr = Math.min(window.devicePixelRatio || 1, DPR_CAP);
     canvas.width  = Math.max(2, Math.round(cssW * dpr));
     canvas.height = Math.max(2, Math.round(cssH * dpr));
@@ -761,6 +774,7 @@
       cur = 0;
     }
     updateCover();
+    return true;
   }
   function updateCover() {
     var vw = video.videoWidth, vh = video.videoHeight;
@@ -852,6 +866,7 @@
   function teardown() {
     if (dead) return; dead = true; running = false;
     if (rafId) cancelAnimationFrame(rafId);
+    if (ro) { ro.disconnect(); ro = null; }
     host.removeEventListener('pointermove', onMove);
     host.removeEventListener('pointerdown', onDown);
     host.removeEventListener('pointerenter', onEnter);
@@ -874,7 +889,17 @@
     try {
       if (!lastT) lastT = now;
       var dt = Math.min((now - lastT) / 1000, 0.1); lastT = now;
-      acc += dt;
+      // Cap the backlog: on a slow device MAX_STEPS throttles the catch-up, and without this
+      // the accumulator grows without bound and never drains.
+      acc = Math.min(acc + dt, SIM_DT * MAX_STEPS * 4);
+      // Self-heal. If the hero's box ever drifts from what the shader was configured with,
+      // every frame after that renders with the wrong frame of reference. Rather than trust
+      // that some event fired, re-check periodically and reconfigure. Cheap at 1-in-30 frames.
+      if ((++frameNo % 30) === 0) {
+        var rc = host.getBoundingClientRect();
+        if (Math.abs(rc.width - cssW) > 1 || Math.abs(rc.height - cssH) > 1) allocate();
+        else rect = rc;
+      }
       syncParallax();
       var steps = Math.min(MAX_STEPS, Math.floor(acc / SIM_DT));
       acc -= steps * SIM_DT;
@@ -887,9 +912,19 @@
     } catch (err) { teardown(); }
   }
 
-  function onResize() { if (!dead) { allocate(); rect = host.getBoundingClientRect(); } }
+  function onResize() {
+    if (dead) return;
+    if (!allocate()) return;                    // ignore transient bogus measurements
+    rect = host.getBoundingClientRect();
+  }
   function onEnter(e) { prev = { x: e.clientX, y: e.clientY, t: performance.now() }; }
   function onLeave() { prev = null; }
+
+  // px -> cells, floored at the Nyquist limit and CEILED at a quarter of the grid so that a
+  // bad cssW can never turn one splat into a Gaussian that covers the entire field.
+  function radCells(px) {
+    return Math.max(R_NYQUIST, Math.min(px / (cssW / simW), simW * 0.25));
+  }
 
   // A single stationary tap/click must still make a drop. Movement is handled by addSegment,
   // which needs two distinct points, so without this a press with no drag does nothing at all.
@@ -902,7 +937,7 @@
     var sx = (clientX - rect.left) / cssW * simW;
     var sy = (clientY - rect.top) / cssH * simH;
     if (sx < 0 || sy < 0 || sx > simW || sy > simH) return;   // press landed outside the hero
-    queue.push([sx, sy, Math.max(R_NYQUIST, R_TAP_PX / (cssW / simW)), A_TAP]);
+    queue.push([sx, sy, radCells(R_TAP_PX), A_TAP]);
   }
 
   function onDown(e) {
@@ -937,19 +972,17 @@
     var dcx = sx1 - sx0, dcy = sy1 - sy0;
     var distCells = Math.sqrt(dcx * dcx + dcy * dcy);
     var distCss = Math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
-    // Cells are square, so either axis gives the same px-per-cell.
-    var cellPx = cssW / simW;
     // Teleport (alt-tab return, window switch) measured in CSS px, not cells: a cell-based
     // threshold scales with the grid and would misfire on a fast mobile flick.
     if (distCss > 0.75 * Math.max(cssW, cssH)) {
-      queue.push([sx1, sy1, Math.max(R_NYQUIST, R_MIN_PX / cellPx), A_MIN]);
+      queue.push([sx1, sy1, radCells(R_MIN_PX), A_MIN]);
       return;
     }
     var speed = distCss / Math.max(dtSec, 1 / 240);
     var sN = Math.max(0, Math.min(1, speed / V_REF));
     var amp = A_MIN + (A_MAX - A_MIN) * sN;                        // fast = stronger...
     var radPx = R_MAX_PX - (R_MAX_PX - R_MIN_PX) * sN;             // ...and tighter (the wake).
-    var rad = Math.max(R_NYQUIST, radPx / cellPx);                 // px -> cells, above Nyquist
+    var rad = radCells(radPx);
     var n = Math.max(1, Math.min(MAX_SEG, Math.ceil(distCells / SPLAT_STEP)));
     var spacing = Math.max(distCells / n, SPLAT_STEP);
     // Gaussians at spacing D sum to a ridge of height a*r*sqrt(pi)/D; solving for the ridge to
@@ -985,8 +1018,8 @@
   function start() {
     if (started || dead) return;
     if (!(video.readyState >= 2 && video.videoWidth > 0)) return;   // 0x0 upload = broken texture
+    if (!allocate()) return;   // hero not laid out yet — retried by resize/RO/load, see allocate
     started = true;
-    allocate();
     texV = gl.createTexture();
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texV);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -1019,6 +1052,12 @@
     host.addEventListener('touchend', onTouchEnd, { passive: true });
     window.addEventListener('resize', onResize, { passive: true });
     window.addEventListener('scroll', onResize, { passive: true });
+    // The hero's own box can change without any window resize (mobile URL-bar collapse,
+    // bfcache restore, orientation on some browsers). Observe the element itself.
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(function () { onResize(); });
+      ro.observe(host);
+    }
     canvas.addEventListener('webglcontextlost', teardown, false);
     if (mqReduce && mqReduce.addEventListener) mqReduce.addEventListener('change', function (ev) { if (ev.matches) teardown(); });
     rafId = requestAnimationFrame(frame);
