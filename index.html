@@ -532,7 +532,6 @@
   'use strict';
 
   var mqReduce = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
-  var mqHover  = window.matchMedia ? window.matchMedia('(hover: hover) and (pointer: fine)') : null;
   if (mqReduce && mqReduce.matches) return;          // respect reduced motion
   // The effect works on both hover (desktop) and touch (mobile). On touch, ripples follow
   // the finger instead of the cursor. No width gate here — innerWidth can be 0 at parse time
@@ -701,17 +700,35 @@
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;' +
                          'pointer-events:none;opacity:0;transition:opacity 500ms linear;';
 
-  var gl = canvas.getContext('webgl2', {
+  // NOT desynchronized. That opts the canvas into a separate presentation path, which on
+  // Windows/AMD with direct composition is a known source of stale or corrupt frames that
+  // persist until something forces a recomposite — matching "stays broken until I scroll".
+  // The latency it saved is not worth that risk on a portfolio.
+  var GL_OPTS = {
     alpha: false, depth: false, stencil: false, antialias: false,
-    premultipliedAlpha: false, preserveDrawingBuffer: false,
-    // NOT desynchronized. That opts the canvas into a separate presentation path, which on
-    // Windows/AMD with direct composition is a known source of stale or corrupt frames that
-    // persist until something forces a recomposite — matching "stays broken until I scroll".
-    // The latency it saved is not worth that risk on a portfolio.
-    failIfMajorPerformanceCaveat: true
-  });
+    premultipliedAlpha: false, preserveDrawingBuffer: false
+  };
+  // failIfMajorPerformanceCaveat exists to decline software rasterisers, but plenty of phone
+  // GPUs trip it spuriously and get no effect at all. Ask for it first, then retry without —
+  // and if the permissive attempt lands on an actual software renderer, decline that instead.
+  var strict = {}; for (var k in GL_OPTS) strict[k] = GL_OPTS[k];
+  strict.failIfMajorPerformanceCaveat = true;
+  var gl = canvas.getContext('webgl2', strict);
+  if (!gl) {
+    gl = canvas.getContext('webgl2', GL_OPTS);
+    if (gl) {
+      var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      var rend = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '') : '';
+      if (/swiftshader|llvmpipe|software|basic render/i.test(rend)) gl = null;
+    }
+  }
   if (!gl) return;
-  if (!gl.getExtension('EXT_color_buffer_float')) return;   // RGBA8 sim quantises into noise
+  // The simulation only ever uses RGBA16F, i.e. HALF float. Requiring EXT_color_buffer_float
+  // demanded full 32-bit renderability we never use, and locked out the many mobile GPUs that
+  // ship EXT_color_buffer_half_float alone — the single biggest reason phones saw no effect.
+  // (An RGBA8 field is still refused: 1/255 quantisation turns the wave into noise.)
+  if (!gl.getExtension('EXT_color_buffer_float') &&
+      !gl.getExtension('EXT_color_buffer_half_float')) return;
 
   function sh(type, src) {
     var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -799,6 +816,13 @@
       [fboA, fboB, fboG].forEach(function (f) { if (f) gl.deleteFramebuffer(f); });
       texA = tex(simW, simH); texB = tex(simW, simH); texG = tex(simW, simH);
       fboA = fbo(texA); fboB = fbo(texB); fboG = fbo(texG);
+      // Having the extension is not proof the format is renderable on this GPU. Ask the
+      // driver directly — otherwise an unsupported RGBA16F target fails silently and the
+      // effect appears to "just not work" with nothing in the console.
+      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+        simW = simH = 0;
+        return false;
+      }
       clearTo(fboA, simW, simH); clearTo(fboB, simW, simH); clearTo(fboG, simW, simH);
       cur = 0;
     }
@@ -948,6 +972,11 @@
     window.removeEventListener('load', start);
     video.removeEventListener('loadeddata', start);
     video.removeEventListener('canplay', start);
+    video.removeEventListener('loadedmetadata', start);
+    video.removeEventListener('playing', start);
+    video.removeEventListener('timeupdate', start);
+    document.removeEventListener('visibilitychange', start);
+    window.removeEventListener('orientationchange', start);
     if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
   }
 
@@ -1144,9 +1173,19 @@
 
   // start() is idempotent and cheap once running, so retry it from every plausible trigger:
   // the window may still be 0-wide (background tab / pre-layout) or the video not yet decodable.
+  // 'playing' and 'timeupdate' matter on phones specifically: iOS can defer autoplay (Low
+  // Power Mode, or until the page is interacted with), so the video is often not decodable
+  // at loadeddata/canplay time. Without these the effect never starts on those devices.
+  // A first touch is also a retry point, since that is what unblocks deferred playback.
   video.addEventListener('loadeddata', start);
   video.addEventListener('canplay', start);
+  video.addEventListener('loadedmetadata', start);
+  video.addEventListener('playing', start);
+  video.addEventListener('timeupdate', start);
+  document.addEventListener('touchstart', start, { passive: true, once: true });
+  document.addEventListener('visibilitychange', start);
   window.addEventListener('resize', start, { passive: true });
+  window.addEventListener('orientationchange', start, { passive: true });
   window.addEventListener('load', start);
   start();
 })();
