@@ -704,7 +704,11 @@
   var gl = canvas.getContext('webgl2', {
     alpha: false, depth: false, stencil: false, antialias: false,
     premultipliedAlpha: false, preserveDrawingBuffer: false,
-    desynchronized: true, failIfMajorPerformanceCaveat: true
+    // NOT desynchronized. That opts the canvas into a separate presentation path, which on
+    // Windows/AMD with direct composition is a known source of stale or corrupt frames that
+    // persist until something forces a recomposite — matching "stays broken until I scroll".
+    // The latency it saved is not worth that risk on a portfolio.
+    failIfMajorPerformanceCaveat: true
   });
   if (!gl) return;
   if (!gl.getExtension('EXT_color_buffer_float')) return;   // RGBA8 sim quantises into noise
@@ -736,6 +740,7 @@
   var simW = 0, simH = 0, cssW = 0, cssH = 0, cur = 0;
   var coverX = 1, coverY = 1, tyCss = 0, frozenTy = 0, lastTransform = '';
   var rect = null, running = false, rafId = 0, dead = false, ro = null, frameNo = 0;
+  var flatStrikes = 0, probe = new Uint8Array(4);
   var acc = 0, lastT = 0, queue = [], prev = null, started = false, amt = 0;
 
   function tex(w, h) {
@@ -867,9 +872,48 @@
     draw();
   }
 
+  // Uploading the video to a texture drives the driver's dynamic-texture / video-processor
+  // path, which is a documented weak spot on AMD (Chrome ships a
+  // disable_nv12_dynamic_textures workaround for it). The source is 30fps at most, so
+  // re-uploading on every rAF was doing several times the necessary work on the one path
+  // most likely to misbehave. requestVideoFrameCallback tells us when a frame actually
+  // arrived; without it we fall back to uploading each frame as before.
+  var newVideoFrame = true, usingRVFC = false;
+  // Last line of defence, and the one that matters most for a portfolio: if the canvas ever
+  // renders a flat, featureless frame — the reported "whole hero turns pink" state — take the
+  // effect away and let the untouched <video> show through. A driver bug we cannot reproduce
+  // is then a non-event for the visitor instead of a broken page.
+  //
+  // Must read in the same frame it drew, since preserveDrawingBuffer is false. Four widely
+  // separated points: this footage is bright sky on one side and a dark silhouette on the
+  // other, so in a healthy frame they differ enormously. Three consecutive strikes (~3s)
+  // before acting, so a legitimately uniform moment cannot trip it. A false positive costs
+  // only the effect; the hero still looks right.
+  function samplePx(fx, fy) {
+    gl.readPixels(Math.min(canvas.width - 1, Math.max(0, Math.round(canvas.width * fx))),
+                  Math.min(canvas.height - 1, Math.max(0, Math.round(canvas.height * fy))),
+                  1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
+    return [probe[0], probe[1], probe[2]];
+  }
+  function checkHealth() {
+    if (amt < 1 || video.readyState < 2) return;          // still fading in / no frame yet
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    var a = samplePx(0.20, 0.30), b = samplePx(0.80, 0.30),
+        c = samplePx(0.20, 0.75), d = samplePx(0.80, 0.75);
+    var spread = 0, i, pts = [a, b, c, d];
+    for (i = 1; i < 4; i++) {
+      spread = Math.max(spread, Math.abs(pts[i][0] - a[0]),
+                                Math.abs(pts[i][1] - a[1]),
+                                Math.abs(pts[i][2] - a[2]));
+    }
+    flatStrikes = (spread <= 4) ? flatStrikes + 1 : 0;
+    if (flatStrikes >= 3) teardown();
+  }
+
   function uploadVideo() {
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texV);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGB, gl.UNSIGNED_BYTE, video);
+    if (usingRVFC) newVideoFrame = false;
   }
 
   // The water loop owns the video transform while it runs: both the CSS string and the uTyCss
@@ -930,9 +974,12 @@
       for (var i = 0; i < steps; i++) simStep();
       flushSplats();
       gradPass();
-      if (video.readyState >= 2) uploadVideo();
+      if (newVideoFrame && video.readyState >= 2) uploadVideo();
       amt = Math.min(1, amt + dt * 2);            // ease the effect in, avoids a pop on insert
       renderPass();
+      // ~once per second. readPixels stalls the pipeline, so this must stay infrequent, and it
+      // has to run here — immediately after the draw, before the buffer is swapped away.
+      if ((frameNo % 75) === 0) checkHealth();
     } catch (err) { teardown(); }
   }
 
@@ -1065,6 +1112,14 @@
     requestAnimationFrame(function () { canvas.style.opacity = '1'; });
 
     running = true;
+    if (video.requestVideoFrameCallback) {
+      usingRVFC = true;
+      var onVideoFrame = function () {
+        newVideoFrame = true;
+        if (!dead) video.requestVideoFrameCallback(onVideoFrame);
+      };
+      video.requestVideoFrameCallback(onVideoFrame);
+    }
     // Desktop: pointer/mouse events (including hover)
     host.addEventListener('pointermove', onMove, { passive: true });
     host.addEventListener('pointerdown', onDown, { passive: true });   // click with no drag
