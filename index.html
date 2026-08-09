@@ -604,6 +604,14 @@
     ' vec2 px=uv*uSimSize;\n' +
     ' float e=min(min(px.x,uSimSize.x-px.x),min(px.y,uSimSize.y-px.y));\n' +
     ' hn*=mix(' + F(EDGE_DAMP) + ',1.0,clamp(e/' + F(EDGE_CELLS) + ',0.0,1.0));\n' + // absorbing rim
+    // Self-heal. A NaN or Inf cell is permanent in a damped system — multiplying it by 0.962
+    // forever leaves it NaN — and the Laplacian spreads it across the whole grid, which is
+    // exactly the "distorts and never comes back until I scroll away" failure. Written as
+    // !(x < limit) so it is TRUE for NaN (every NaN comparison is false) as well as Inf.
+    ' if(!(abs(hn)<1.0e4)) hn=0.0;\n' +
+    // And keep the field far below half-float range, so h can never reach Inf in the first
+    // place (2h-hp with h=Inf yields Inf-Inf = NaN on the following step).
+    ' hn=clamp(hn,-8.0,8.0);\n' +
     ' o=vec4(hn,h,lap,0.0);}';
 
   var FS_SPLAT =
@@ -649,22 +657,38 @@
     // refract in SCREEN space first, then undo the parallax translate, then undo scale(1.15)
     // about the centre, then object-fit:cover. Order matters: doing refraction first keeps
     // ripple size constant in screen px regardless of scroll or window aspect.
-    'vec2 mapUV(vec2 uv,vec2 off){vec2 p=uv+off;p.y-=uTyCss/uResCss.y;\n' +
+    // uTyCss is bounded here too: if the parallax term ever ran away it would push the sample
+    // point clean off the top of the video, and CLAMP_TO_EDGE would return the sky row for
+    // every fragment — a uniformly pink hero. In healthy operation this is <=0.46.
+    // 0.6 sits just above the legitimate maximum (tyCss peaks at 0.4*vh*1.15 = 0.46*hero),
+    // so this never binds in normal scrolling but stops a runaway value from translating the
+    // sample point clean off the video, where CLAMP_TO_EDGE would return the sky row for every
+    // fragment and paint the hero uniformly pink.
+    'vec2 mapUV(vec2 uv,vec2 off){vec2 p=uv+off;p.y-=clamp(uTyCss/uResCss.y,-0.6,0.6);\n' +
     ' p=(p-0.5)/uScale+0.5;return (p-0.5)*uCover+0.5;}\n' +
     'void main(){vec2 uv=vec2(gl_FragCoord.x,uTargetSize.y-gl_FragCoord.y)/uTargetSize;\n' +
     ' vec4 G=bic(uGrad,uv,uGradSize);vec2 gr=G.xy*uAmt;float lap=G.z*uAmt;\n' +
+    // Gate non-finite input before it reaches normalize()/refract(), where one NaN would
+    // contaminate the whole fragment. !(x < limit) is true for NaN and for Inf.
+    ' if(!(dot(gr,gr)<1.0e8)) gr=vec2(0.0);\n' +
+    ' if(!(abs(lap)<1.0e8)) lap=0.0;\n' +
     ' vec3 nR=normalize(vec3(-gr*3.0,1.0));\n' +
     ' vec3 nS=normalize(vec3(-gr*24.0,1.0));\n' +
     ' vec3 T=refract(vec3(0.0,0.0,-1.0),nR,0.7502);\n' +   // 1/1.333, air->water
     ' vec2 op=T.xy/abs(T.z)*300.0;float m=length(op);\n' +
-    ' if(m>10.0) op*=10.0/m;\n' +   // ceiling: past ~15px it reads as heat haze, not water
+    // NaN-SAFE ceiling. The old `if(m>10.0)` silently did nothing when m was NaN, because
+    // every NaN comparison is false — so the one case that most needed clamping was the one
+    // case that skipped it. Test the safe direction instead.
+    ' if(!(m<1.0e6)) op=vec2(0.0); else if(m>10.0) op*=10.0/m;\n' +
     ' vec2 off=vec2(op.x/uResCss.x,-op.y/uResCss.y);\n' +
-    // Hard bound in UV. With a sane uResCss this never binds (10px over a >=200px hero is
-    // 0.05), but it guarantees that a bad frame of reference can never smear the whole hero.
     ' off=clamp(off,vec2(-0.05),vec2(0.05));\n' +
-    ' float rr=texture(uVideo,mapUV(uv,off*0.955)).r;\n' +
-    ' vec3  gg=texture(uVideo,mapUV(uv,off)).rgb;\n' +
-    ' float bb=texture(uVideo,mapUV(uv,off*1.045)).b;\n' +  // exaggerated dispersion fringe
+    // Final structural guarantee: every fragment samples within a small neighbourhood of where it
+    // would have sampled with no ripple at all. Whatever happens upstream, the worst case is
+    // a local wobble — the image can never collapse to one smeared colour across the hero.
+    ' vec2 base=mapUV(uv,vec2(0.0));vec2 lo=base-0.06,hi=base+0.06;\n' +
+    ' float rr=texture(uVideo,clamp(mapUV(uv,off*0.955),lo,hi)).r;\n' +
+    ' vec3  gg=texture(uVideo,clamp(mapUV(uv,off),lo,hi)).rgb;\n' +
+    ' float bb=texture(uVideo,clamp(mapUV(uv,off*1.045),lo,hi)).b;\n' +
     ' vec3 col=vec3(rr,gg.g,bb);\n' +
     ' float bright=clamp(1.0-6.0*lap,0.82,1.30);\n' +       // brighten under crests (caustic cue)
     ' vec3 Hv=normalize(normalize(vec3(-0.35,0.75,0.55))+vec3(0.0,0.0,1.0));\n' +
