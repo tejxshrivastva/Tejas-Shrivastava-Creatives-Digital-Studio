@@ -236,7 +236,7 @@
         </div>
         <div class="w-media">
           <a class="w-media-link" href="https://tejxshrivastva.github.io/Aranya-Archive/" target="_blank" rel="noopener" aria-label="Open Aranya Archive"></a>
-          <video class="dc-work-vid" autoplay muted loop playsinline preload="metadata" src="work-5.mp4"></video>
+          <video class="dc-work-vid" muted loop playsinline preload="none" poster="work-5-poster.jpg" data-src="work-5.mp4"></video>
         </div>
       </div>
     </article>
@@ -251,7 +251,7 @@
         </div>
         <div class="w-media">
           <a class="w-media-link" href="https://kimondo.in" target="_blank" rel="noopener" aria-label="Open Kimondo"></a>
-          <video class="dc-work-vid" autoplay muted loop playsinline preload="metadata" src="work-6.mp4"></video>
+          <video class="dc-work-vid" muted loop playsinline preload="none" poster="work-6-poster.jpg" data-src="work-6.mp4"></video>
         </div>
       </div>
     </article>
@@ -266,7 +266,7 @@
         </div>
         <div class="w-media">
           <a class="w-media-link" href="https://powderbeauty.com" target="_blank" rel="noopener" aria-label="Open Powder Beauty"></a>
-          <video class="dc-work-vid" autoplay muted loop playsinline preload="metadata" src="work-3.mp4"></video>
+          <video class="dc-work-vid" muted loop playsinline preload="none" poster="work-3-poster.jpg" data-src="work-3.mp4"></video>
         </div>
       </div>
     </article>
@@ -281,7 +281,7 @@
         </div>
         <div class="w-media">
           <a class="w-media-link" href="https://tejxshrivastva.github.io/Ferretti-Figlia/" target="_blank" rel="noopener" aria-label="Open Ferretti &amp; Figlia"></a>
-          <video class="dc-work-vid" autoplay muted loop playsinline preload="metadata" src="work-4.mp4"></video>
+          <video class="dc-work-vid" muted loop playsinline preload="none" poster="work-4-poster.jpg" data-src="work-4.mp4"></video>
         </div>
       </div>
     </article>
@@ -296,7 +296,7 @@
         </div>
         <div class="w-media">
           <a class="w-media-link" href="https://sharksports.co.in" target="_blank" rel="noopener" aria-label="Open Shark Sports"></a>
-          <video class="dc-work-vid" autoplay muted loop playsinline preload="metadata" src="work-1.mp4"></video>
+          <video class="dc-work-vid" muted loop playsinline preload="none" poster="work-1-poster.jpg" data-src="work-1.mp4"></video>
         </div>
       </div>
     </article>
@@ -311,7 +311,7 @@
         </div>
         <div class="w-media">
           <a class="w-media-link" href="https://gobighospitality.com" target="_blank" rel="noopener" aria-label="Open Go Big Hospitality"></a>
-          <video class="dc-work-vid" autoplay muted loop playsinline preload="metadata" src="work-2.mp4"></video>
+          <video class="dc-work-vid" muted loop playsinline preload="none" poster="work-2-poster.jpg" data-src="work-2.mp4"></video>
         </div>
       </div>
     </article>
@@ -465,20 +465,28 @@
       });
     }
 
-    // Play work + reel videos only while near/in the viewport; pause off-screen.
+    // Work + reel videos: download only when about a screen away (data-src), play only
+    // while near/in the viewport, pause off-screen. Posters cover the card until then.
     var vids = document.querySelectorAll('video.dc-work-vid, video.dc-reel-vid');
     vids.forEach(function (v) { v.muted = true; v.defaultMuted = true; v.volume = 0; v.loop = true; });
+    function loadVid(v) {
+      if (v.dataset.src && !v.getAttribute('src')) { v.preload = 'auto'; v.src = v.dataset.src; v.load(); }
+    }
+    function playVid(v) { loadVid(v); var q = v.play(); if (q && q.catch) q.catch(function () {}); }
     if ('IntersectionObserver' in window) {
+      var loadIO = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { loadVid(e.target); loadIO.unobserve(e.target); } });
+      }, { rootMargin: '120% 0px' });
       var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (e) {
           var v = e.target;
-          if (e.isIntersecting) { var q = v.play(); if (q && q.catch) q.catch(function () {}); }
+          if (e.isIntersecting) playVid(v);
           else { try { v.pause(); } catch (err) {} }
         });
       }, { rootMargin: '200px 0px', threshold: 0.1 });
-      vids.forEach(function (v) { io.observe(v); });
+      vids.forEach(function (v) { loadIO.observe(v); io.observe(v); });
     } else {
-      vids.forEach(function (v) { var q = v.play(); if (q && q.catch) q.catch(function () {}); });
+      vids.forEach(playVid);
     }
 
     // Scroll-reveal for tagged elements.
